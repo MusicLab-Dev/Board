@@ -31,7 +31,7 @@ NetworkModule::NetworkModule(void)
         _isBinded = true;
 }
 
-bool NetworkModule::tryToBindUsb(void) noexcept
+bool NetworkModule::tryToBindUsb(void)
 {
     // Define broadcast address
     sockaddr_in usbBroadcastAddress {
@@ -47,7 +47,12 @@ bool NetworkModule::tryToBindUsb(void) noexcept
         reinterpret_cast<const sockaddr *>(&usbBroadcastAddress),
         sizeof(usbBroadcastAddress)
     );
-    return ret < 0;
+
+    if (ret < 0 && errno == 13)
+        throw std::runtime_error(std::strerror(errno));
+    if (ret < 0)
+        std::cout << "Error: USB broadcast address does not exist..." << std::endl;
+    return ret == 0;
 }
 
 NetworkModule::~NetworkModule(void)
@@ -68,10 +73,8 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
 {
     // Check if the broadcast socket is binded
     if (!_isBinded) {
-        if (!tryToBindUsb()) {
-            std::cout << "NetworkModule::discover: Couldn't bind to usb broadcast" << std::endl;
+        if (!tryToBindUsb())
             return;
-        }
         _isBinded = true;
     }
 
@@ -120,9 +123,9 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
     Protocol::Packet response;
     const auto size = ::read(_masterSocket, &response, sizeof(response));
     std::cout << "response is " << size << "bytes" << std::endl;
-    // to continue...
+    // To continue...
 
-    // only if ID assignment is done correctly
+    // Only if ID assignment is done correctly
     _connectionType = masterEndpoint.connectionType;
     _nodeDistance = masterEndpoint.distance;
     scheduler.setState(Scheduler::State::Connected);
@@ -175,24 +178,22 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
         );
         std::cout << "recvfrom size: " << size << std::endl;
 
-        // loop end condition, until read buffer is empty
+        // Loop end condition, until read buffer is empty
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             std::cout << "nothing remaining on the socket" << std::endl;
             if (scheduler.state() != Scheduler::State::Connected && !usbEndpoints.empty())
                 analyzeUsbEndpoints(usbEndpoints, scheduler);
             return;
-        } else if (size < 0) {
+        } else if (size < 0)
             throw std::runtime_error(std::strerror(errno));
-            return;
-        }
 
-        // ignore unknow and self broadcasted packets
+        // Ignore unknow and self broadcasted packets
         if (packet.magicKey != Protocol::MusicLabMagicKey || packet.boardID == _boardID) {
             std::cout << "ignoring packet" << std::endl;
             continue;
         }
 
-        // debug
+        // Debug
         char senderAddressString[100];
         std::memset(senderAddressString, 0, 100);
         ::inet_ntop(AF_INET, &(usbSenderAddress.sin_addr), senderAddressString, 100);

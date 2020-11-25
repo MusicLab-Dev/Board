@@ -74,7 +74,7 @@ private:
     Core::Vector<std::uint8_t, std::uint16_t> _buffer; // To replace by ringbuffer
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
-    [[nodiscard]] bool tryToBindUsb(void) noexcept;
+    [[nodiscard]] bool tryToBindUsb(void);
 
     /** @brief Listen to connected boards that are in client mode */
     void processClients(Scheduler &scheduler) noexcept;

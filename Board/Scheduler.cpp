@@ -29,6 +29,8 @@ Scheduler::~Scheduler(void)
 
 void Scheduler::run(void)
 {
+    std::cout << "MLBoard running" << std::endl;
+
     using namespace std::chrono;
 
     constexpr auto ProcessDiscovery = [](Scheduler &scheduler, auto &mod, auto &previousTime, const auto &currentTime) {
@@ -40,8 +42,6 @@ void Scheduler::run(void)
             mod.discover(scheduler);
         }
     };
-
-    std::cout << "MLBoard running" << std::endl;
 
     steady_clock::time_point previousTick {};
     steady_clock::time_point previousHardwareDiscovery {};
