@@ -15,6 +15,7 @@ static bool IsKilled = false;
 static void SigIntHandler(int)
 {
     IsKilled = true;
+    exit(0);
 }
 
 Scheduler::Scheduler(std::vector<std::string> &&arguments)

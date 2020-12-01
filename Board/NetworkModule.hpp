@@ -14,7 +14,10 @@
 #include <unistd.h>
 
 #include <Core/Vector.hpp>
+
+#include <Protocol/Packet.hpp>
 #include <Protocol/Protocol.hpp>
+#include <Protocol/ConnectionProtocol.hpp>
 
 #include "Types.hpp"
 #include "Module.hpp"

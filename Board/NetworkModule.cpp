@@ -88,6 +88,8 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
 {
     std::cout << "NetworkModule::initNewMasterConnection function" << std::endl;
 
+    using namespace Protocol;
+
     if (_masterSocket) {
         ::close(_masterSocket);
         _masterSocket = -1;
@@ -117,13 +119,19 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
 
     std::cout << "Starting ID request procedure..." << std::endl;
 
-    Protocol::Packet request(Protocol::PacketID::IDResquest);
-    ::send(_masterSocket, &request, request.size(), 0);
+    char requestBuffer[sizeof(WritablePacket::Header)];
+    WritablePacket wpacket(std::begin(requestBuffer), std::end(requestBuffer));
+    wpacket.prepare(ProtocolType::Connection, ConnectionCommand::Connect);
+    ::send(_masterSocket, &requestBuffer, wpacket.totalSize(), 0);
 
-    Protocol::Packet response;
-    const auto size = ::read(_masterSocket, &response, sizeof(response));
+    char responseBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    const auto size = ::read(_masterSocket, &responseBuffer, sizeof(responseBuffer));
     std::cout << "response is " << size << "bytes" << std::endl;
-    // To continue...
+
+    ReadablePacket rpacket(std::begin(responseBuffer), std::end(responseBuffer));
+    const BoardID newID = rpacket.extract<BoardID>();
+
+    std::cout << "board ID received: " << newID << std::endl;
 
     // Only if ID assignment is done correctly
     _connectionType = masterEndpoint.connectionType;
@@ -188,7 +196,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
             throw std::runtime_error(std::strerror(errno));
 
         // Ignore unknow and self broadcasted packets
-        if (packet.magicKey != Protocol::MusicLabMagicKey || packet.boardID == _boardID) {
+        if (packet.magicKey != Protocol::SpecialLabMagicKey || packet.boardID == _boardID) {
             std::cout << "ignoring packet" << std::endl;
             continue;
         }
