@@ -123,14 +123,15 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
     _nodeDistance = masterEndpoint.distance;
     scheduler.setState(Scheduler::State::Connected);
 
-    return;
-
     std::cout << "Starting ID request procedure..." << std::endl;
 
-    char requestBuffer[sizeof(WritablePacket::Header)];
-    WritablePacket wpacket(std::begin(requestBuffer), std::end(requestBuffer));
-    wpacket.prepare(ProtocolType::Connection, ConnectionCommand::Connect);
-    ::send(_masterSocket, &requestBuffer, wpacket.totalSize(), 0);
+    char IDRequestBuffer[sizeof(WritablePacket::Header)];
+
+    WritablePacket IDRequest(std::begin(IDRequestBuffer), std::end(IDRequestBuffer));
+    IDRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDRequest);
+    ::send(_masterSocket, &IDRequestBuffer, IDRequest.totalSize(), 0);
+
+    return;
 
     char responseBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
     const auto size = ::read(_masterSocket, &responseBuffer, sizeof(responseBuffer));
