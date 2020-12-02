@@ -3,18 +3,18 @@
  * @ Description: Scheduler
  */
 
-#include <signal.h>
-
 #include <iostream>
+
+#include <signal.h>
 
 #include "Scheduler.hpp"
 
-/** @brief Store the SIGINT trigger state */
-static bool IsKilled = false;
+static bool Running = true;
 
 static void SigIntHandler(int)
 {
-    IsKilled = true;
+    std::cout << "\nCTRL-C\n" << std::endl;
+    Running = false;
 }
 
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
@@ -48,7 +48,7 @@ void Scheduler::run(void)
     steady_clock::time_point previousNetworkDiscovery {};
     steady_clock::time_point currentTime;
 
-    while (!IsKilled) {
+    while (Running) {
         currentTime = steady_clock::now();
 
         // Process discovery of each module if needed

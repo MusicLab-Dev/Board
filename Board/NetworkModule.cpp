@@ -62,15 +62,17 @@ NetworkModule::~NetworkModule(void)
 
 void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
+    std::cout << "NetworkModule::tick function" << std::endl;
     if (scheduler.state() != Scheduler::State::Connected)
         return;
-    std::cout << "NetworkModule::tick function" << std::endl;
     processClients(scheduler);
     // Send hardware module data
 }
 
 void NetworkModule::discover(Scheduler &scheduler) noexcept
 {
+    std::cout << "NetworkModule::discover function" << std::endl;
+
     // Check if the broadcast socket is binded
     if (!_isBinded) {
         if (!tryToBindUsb())

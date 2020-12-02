@@ -16,8 +16,10 @@ Net::Socket initUsbBroadcastSocket(void)
     // opening UDP broadcast socket
     int broadcast = 1;
     Net::Socket usbBroadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (usbBroadcastSocket < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (usbBroadcastSocket < 0) {
+        std::cout << "Server::initUsbBroadcastSocket::socket failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
     auto ret = ::setsockopt(
         usbBroadcastSocket,
         SOL_SOCKET,
@@ -25,8 +27,10 @@ Net::Socket initUsbBroadcastSocket(void)
         &broadcast,
         sizeof(broadcast)
     );
-    if (ret < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (ret < 0) {
+        std::cout << "Server::initUsbBroadcastSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
     return usbBroadcastSocket;
 }
 
@@ -56,7 +60,8 @@ void emitUsbBroadcastPacket(Net::Socket usbSocket)
         sizeof(usbBroadcastAddress)
     );
     if (ret < 0) {
-        throw std::runtime_error(std::strerror(errno));
+        std::cout << "Server::emitUsbBroadcastPacket::sendto failed: " << std::strerror(errno) << std::endl;
+        exit(0);
     }
 }
 
@@ -72,13 +77,23 @@ TEST(Scheduler, ExternalTestTemplate)
     // Wait until the thread is started
     while (!started);
 
+    // Studio simulation:
+
     Net::Socket usbSocket = initUsbBroadcastSocket();
     emitUsbBroadcastPacket(usbSocket);
 
     Net::Socket tcpSocket;
     tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (tcpSocket < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (tcpSocket < 0) {
+        std::cout << "Server::socket failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
+
+    int enable = 1;
+    if (::setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+        std::cout << "setsockopt failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
 
     sockaddr_in studioAddress = {
         .sin_family = AF_INET,
@@ -92,11 +107,16 @@ TEST(Scheduler, ExternalTestTemplate)
         reinterpret_cast<const sockaddr *>(&studioAddress),
         sizeof(studioAddress)
     );
-    if (ret < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (ret < 0) {
+        std::cout << "tcpSocket::bind failed: " << std::strerror(errno) << std::endl;
+        close(tcpSocket);
+        exit(0);
+    }
     ret = ::listen(tcpSocket, 5);
-    if (ret < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (ret < 0) {
+        std::cout << "listen failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
 
     sockaddr_in boardAddress;
     socklen_t boardAddressLen = sizeof(boardAddress);
@@ -105,13 +125,19 @@ TEST(Scheduler, ExternalTestTemplate)
         reinterpret_cast<sockaddr *>(&boardAddress),
         &boardAddressLen
     );
-    if (boardSocket < 0)
-        throw std::runtime_error(std::strerror(errno));
+    if (boardSocket < 0) {
+        std::cout << "accept failed: " << std::strerror(errno) << std::endl;
+        exit(0);
+    }
 
     // Stop and join scheduler
+    std::cout << "STOPING THE THREAD" << std::endl;
     scheduler.stop();
-    if (thd.joinable())
+    if (thd.joinable()) {
+        std::cout << "WAITING THE THREAD" << std::endl;
         thd.join();
+    }
+    std::cout << "EXIT THE TEST" << std::endl;
 }
 
 TEST(Scheduler, InternalTestTemplate)
