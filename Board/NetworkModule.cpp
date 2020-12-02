@@ -119,6 +119,12 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
     }
     std::cout << "Connected to master" << std::endl;
 
+    _connectionType = masterEndpoint.connectionType;
+    _nodeDistance = masterEndpoint.distance;
+    scheduler.setState(Scheduler::State::Connected);
+
+    return;
+
     std::cout << "Starting ID request procedure..." << std::endl;
 
     char requestBuffer[sizeof(WritablePacket::Header)];
