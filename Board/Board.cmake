@@ -4,6 +4,9 @@ project(Board)
 get_filename_component(BoardDir ${CMAKE_CURRENT_LIST_FILE} PATH)
 
 set(BoardSources
+    ${BoardDir}/ConfigTable.hpp
+    ${BoardDir}/ConfigTable.ipp
+    ${BoardDir}/ConfigTable.cpp
     ${BoardDir}/HardwareModule.cpp
     ${BoardDir}/HardwareModule.hpp
     ${BoardDir}/HardwareModule.ipp

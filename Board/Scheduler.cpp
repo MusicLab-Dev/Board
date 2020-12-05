@@ -17,9 +17,15 @@ static void SigIntHandler(int)
     Running = false;
 }
 
+/**
+ * Arguments:
+ * --config-path [String]
+ *   -> Path to the config table file
+ **/
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
 {
     ::signal(SIGINT, &SigIntHandler);
+
 }
 
 Scheduler::~Scheduler(void)

@@ -6,6 +6,7 @@ get_filename_component(BoardTestsDir ${CMAKE_CURRENT_LIST_FILE} PATH)
 
 set(BoardTestsSources
     ${BoardTestsDir}/tests_Scheduler.cpp
+    ${BoardTestsDir}/tests_ConfigTable.cpp
 )
 
 add_executable(${PROJECT_NAME} ${BoardTestsSources})

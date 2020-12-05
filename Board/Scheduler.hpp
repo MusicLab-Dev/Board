@@ -17,6 +17,9 @@
 class alignas(Core::CacheLineSize * 4) Scheduler
 {
 public:
+    /** @brief Path of the configuration file */
+    static constexpr auto DefaultConfigFilePath = "Config.conf";
+
     /** @brief Global connection state */
     enum class State : bool {
         Disconnected,
