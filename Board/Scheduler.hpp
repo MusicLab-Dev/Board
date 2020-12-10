@@ -7,11 +7,16 @@
 
 #include <vector>
 #include <string>
+#include <fstream>
 
 #include "Types.hpp"
 
 #include "HardwareModule.hpp"
 #include "NetworkModule.hpp"
+#include "ConfigTable.hpp"
+
+static std::ifstream stream("./Board/Board.conf");
+static ConfigTable confTable(stream);
 
 /** @brief The scheduler is responsible to coordinate each module in time */
 class alignas(Core::CacheLineSize * 4) Scheduler

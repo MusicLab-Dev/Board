@@ -5,17 +5,9 @@
 
 #include <iostream>
 
-#include <signal.h>
-
 #include "Scheduler.hpp"
 
 static bool Running = true;
-
-static void SigIntHandler(int)
-{
-    std::cout << "\nCTRL-C\n" << std::endl;
-    Running = false;
-}
 
 /**
  * Arguments:
@@ -24,13 +16,10 @@ static void SigIntHandler(int)
  **/
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
 {
-    ::signal(SIGINT, &SigIntHandler);
-
 }
 
 Scheduler::~Scheduler(void)
 {
-
 }
 
 void Scheduler::run(void)
@@ -73,5 +62,5 @@ void Scheduler::run(void)
 
 void Scheduler::stop(void) noexcept
 {
-    ::kill(::getpid(), SIGINT);
+    Running = false;
 }

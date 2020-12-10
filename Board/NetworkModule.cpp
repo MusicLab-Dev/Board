@@ -38,7 +38,7 @@ bool NetworkModule::tryToBindUsb(void)
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr("169.254.255.255")
+            .s_addr = ::inet_addr(confTable.get("BroadcastAddress").c_str())
         }
     };
 
@@ -125,10 +125,11 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
 
     std::cout << "Starting ID request procedure..." << std::endl;
 
+    // packet creation
     char IDRequestBuffer[sizeof(WritablePacket::Header)];
-
     WritablePacket IDRequest(std::begin(IDRequestBuffer), std::end(IDRequestBuffer));
     IDRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDRequest);
+    // send packet
     ::send(_masterSocket, &IDRequestBuffer, IDRequest.totalSize(), 0);
 
     return;

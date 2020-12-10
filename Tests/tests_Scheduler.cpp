@@ -11,38 +11,36 @@
 #include <Board/Scheduler.hpp>
 #include <Protocol/Packet.hpp>
 
-Net::Socket initUsbBroadcastSocket(void)
+bool initBroadcastSocket(Net::Socket &broadcastSocket)
 {
     // opening UDP broadcast socket
     int broadcast = 1;
-    Net::Socket usbBroadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (usbBroadcastSocket < 0) {
-        std::cout << "Server::initUsbBroadcastSocket::socket failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+    broadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (broadcastSocket < 0) {
+        std::cout << "Sutdio::initBroadcastSocket::socket failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
     auto ret = ::setsockopt(
-        usbBroadcastSocket,
+        broadcastSocket,
         SOL_SOCKET,
         SO_BROADCAST,
         &broadcast,
         sizeof(broadcast)
     );
     if (ret < 0) {
-        std::cout << "Server::initUsbBroadcastSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+        std::cout << "Studio::initBroadcastSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
-    return usbBroadcastSocket;
+    return true;
 }
 
-void emitUsbBroadcastPacket(Net::Socket usbSocket)
+bool emitBroadcastPacket(Net::Socket &broadcastSocket)
 {
-    std::cout << "Server::emitBroadcastPacket" << std::endl;
-
     sockaddr_in usbBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr("169.254.255.255")
+            .s_addr = ::inet_addr("0.0.0.0")
         }
     };
 
@@ -52,7 +50,7 @@ void emitUsbBroadcastPacket(Net::Socket usbSocket)
     packet.distance = 0;
 
     auto ret = ::sendto(
-        usbSocket,
+        broadcastSocket,
         &packet,
         sizeof(packet),
         0,
@@ -60,41 +58,26 @@ void emitUsbBroadcastPacket(Net::Socket usbSocket)
         sizeof(usbBroadcastAddress)
     );
     if (ret < 0) {
-        std::cout << "Server::emitUsbBroadcastPacket::sendto failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+        std::cout << "Studio::emitBroadcastPacket::sendto failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
+    return true;
 }
 
-TEST(Scheduler, ExternalTestTemplate)
+bool initMasterSocket(Net::Socket &masterSocket)
 {
-    std::atomic<bool> started = false;
-    Scheduler scheduler({});
-    std::thread thd([&scheduler, &started] {
-        started = true;
-        scheduler.run();
-    });
-
-    // Wait until the thread is started
-    while (!started);
-
-    // Studio simulation:
-
-    Net::Socket usbSocket = initUsbBroadcastSocket();
-    emitUsbBroadcastPacket(usbSocket);
-
-    Net::Socket tcpSocket;
-    tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (tcpSocket < 0) {
-        std::cout << "Server::socket failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+    // open master socket
+    masterSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (masterSocket < 0) {
+        std::cout << "Studio::initMasterSocket::socket failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
-
+    // set socket options for master socket
     int enable = 1;
-    if (::setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-        std::cout << "setsockopt failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+    if (::setsockopt(masterSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+        std::cout << "Studio::initMasterSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
-
     sockaddr_in studioAddress = {
         .sin_family = AF_INET,
         .sin_port = ::htons(421),
@@ -102,49 +85,88 @@ TEST(Scheduler, ExternalTestTemplate)
             .s_addr = ::htonl(INADDR_ANY)
         }
     };
+    // bind master socket to local address
     auto ret = ::bind(
-        tcpSocket,
+        masterSocket,
         reinterpret_cast<const sockaddr *>(&studioAddress),
         sizeof(studioAddress)
     );
     if (ret < 0) {
-        std::cout << "tcpSocket::bind failed: " << std::strerror(errno) << std::endl;
-        close(tcpSocket);
-        exit(0);
+        std::cout << "Studio::initMasterSocket::bind failed: " << std::strerror(errno) << std::endl;
+        close(masterSocket);
+        return false;
     }
-    ret = ::listen(tcpSocket, 5);
+    ret = ::listen(masterSocket, 5);
     if (ret < 0) {
-        std::cout << "listen failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+        std::cout << "Studio::initMasterSocket::listen failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
+    return true;
+}
 
-    sockaddr_in boardAddress;
+bool waitForBoardConnection(const Net::Socket masterSocket, Net::Socket &boardSocket)
+{
+    sockaddr_in boardAddress { 0 };
     socklen_t boardAddressLen = sizeof(boardAddress);
-    Net::Socket boardSocket = ::accept(
-        tcpSocket,
+
+    boardSocket = ::accept(
+        masterSocket,
         reinterpret_cast<sockaddr *>(&boardAddress),
         &boardAddressLen
     );
     if (boardSocket < 0) {
-        std::cout << "accept failed: " << std::strerror(errno) << std::endl;
-        exit(0);
+        std::cout << "Studio::waitForBoardConnection::accept failed: " << std::strerror(errno) << std::endl;
+        return false;
     }
-
-    // Stop and join scheduler
-    std::cout << "STOPING THE THREAD" << std::endl;
-    scheduler.stop();
-    if (thd.joinable()) {
-        std::cout << "WAITING THE THREAD" << std::endl;
-        thd.join();
-    }
-    std::cout << "EXIT THE TEST" << std::endl;
+    return true;
 }
 
-TEST(Scheduler, InternalTestTemplate)
+bool waitForBoardIDRequest(const Net::Socket boardSocket)
 {
-    Scheduler scheduler({});
+    using namespace Protocol;
 
-    // Execute internal tests
-    scheduler.networkModule().tick(scheduler);
-    // ...
+    char buffer[1024];
+
+    const auto ret = ::recv(boardSocket, buffer, 1024, 0);
+    if (ret < 0) {
+        std::cout << "Studio::waitForBoardIDRequest::recv failed: " << std::strerror(errno) << std::endl;
+        return false;
+    }
+
+    ReadablePacket requestFromBoard(std::begin(buffer), std::end(buffer));
+    if (requestFromBoard.protocolType() == ProtocolType::Connection &&
+            requestFromBoard.commandAs<ConnectionCommand>() == ConnectionCommand::IDRequest) {
+                return true;
+    }
+    return false;
+}
+
+TEST(Scheduler, BoardConnection)
+{
+    std::atomic<bool> started(false);
+    Scheduler scheduler({});
+    std::thread thd([&scheduler, &started] {
+        started = true;
+        scheduler.run();
+    });
+    while (!started);
+
+    // Studio simulation:
+
+    Net::Socket broadcastSocket { -1 };
+    Net::Socket masterSocket { -1 };
+    Net::Socket boardSocket { -1 };
+
+    ASSERT_TRUE(initBroadcastSocket(broadcastSocket));
+    ASSERT_TRUE(emitBroadcastPacket(broadcastSocket));
+    ASSERT_TRUE(initMasterSocket(masterSocket));
+    ASSERT_TRUE(waitForBoardConnection(masterSocket, boardSocket));
+    ASSERT_TRUE(waitForBoardIDRequest(boardSocket));
+
+    // Stop and join BoardApp
+    std::cout << "stopping board thread" << std::endl;
+    scheduler.stop();
+    if (thd.joinable()) {
+        thd.join();
+    }
 }
