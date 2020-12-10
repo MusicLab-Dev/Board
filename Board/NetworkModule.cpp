@@ -34,11 +34,12 @@ NetworkModule::NetworkModule(void)
 bool NetworkModule::tryToBindUsb(void)
 {
     // Define broadcast address
+    const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
     sockaddr_in usbBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr(confTable.get("BroadcastAddress").c_str())
+            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "0.0.0.0" : broadcastAddress.c_str())
         }
     };
 
@@ -234,11 +235,12 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
     packet.connectionType = _connectionType;
     packet.distance = _nodeDistance;
 
+    const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
     sockaddr_in usbBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr("169.254.255.255")
+            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "0.0.0.0" : broadcastAddress.c_str())
         }
     };
 
