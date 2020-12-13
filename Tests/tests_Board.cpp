@@ -21,7 +21,8 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
     // opening UDP broadcast socket
     int broadcast = 1;
     broadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (broadcastSocket < 0) {
+    if (broadcastSocket < 0)
+    {
         printError("initBroadcastSocket::socket");
         return false;
     }
@@ -30,9 +31,9 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
         SOL_SOCKET,
         SO_BROADCAST,
         &broadcast,
-        sizeof(broadcast)
-    );
-    if (ret < 0) {
+        sizeof(broadcast));
+    if (ret < 0)
+    {
         printError("initBroadcastSocket::setsockopt");
         return false;
     }
@@ -41,13 +42,11 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
 
 bool emitBroadcastPacket(Net::Socket &broadcastSocket)
 {
-    sockaddr_in usbBroadcastAddress {
+    sockaddr_in usbBroadcastAddress{
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr("0.0.0.0")
-        }
-    };
+            .s_addr = ::inet_addr("127.0.0.1")}};
 
     Protocol::DiscoveryPacket packet;
     packet.boardID = static_cast<Protocol::BoardID>(420);
@@ -60,9 +59,9 @@ bool emitBroadcastPacket(Net::Socket &broadcastSocket)
         sizeof(packet),
         0,
         reinterpret_cast<const sockaddr *>(&usbBroadcastAddress),
-        sizeof(usbBroadcastAddress)
-    );
-    if (ret < 0) {
+        sizeof(usbBroadcastAddress));
+    if (ret < 0)
+    {
         printError("emitBroadcastPacket::sendto");
         return false;
     }
@@ -73,13 +72,15 @@ bool initMasterSocket(Net::Socket &masterSocket)
 {
     // open master socket
     masterSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (masterSocket < 0) {
+    if (masterSocket < 0)
+    {
         printError("initMasterSocket::socket");
         return false;
     }
     // set socket options for master socket
     int enable = 1;
-    if (::setsockopt(masterSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+    if (::setsockopt(masterSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+    {
         printError("initMasterSocket::setsockopt");
         return false;
     }
@@ -87,22 +88,21 @@ bool initMasterSocket(Net::Socket &masterSocket)
         .sin_family = AF_INET,
         .sin_port = ::htons(421),
         .sin_addr = {
-            .s_addr = ::htonl(INADDR_ANY)
-        }
-    };
+            .s_addr = ::htonl(INADDR_ANY)}};
     // bind master socket to local address
     auto ret = ::bind(
         masterSocket,
         reinterpret_cast<const sockaddr *>(&studioAddress),
-        sizeof(studioAddress)
-    );
-    if (ret < 0) {
+        sizeof(studioAddress));
+    if (ret < 0)
+    {
         printError("initMasterSocket::bind");
         close(masterSocket);
         return false;
     }
     ret = ::listen(masterSocket, 5);
-    if (ret < 0) {
+    if (ret < 0)
+    {
         printError("initMasterSocket::listen");
         return false;
     }
@@ -111,15 +111,15 @@ bool initMasterSocket(Net::Socket &masterSocket)
 
 bool waitForBoardConnection(const Net::Socket masterSocket, Net::Socket &boardSocket)
 {
-    sockaddr_in boardAddress { 0 };
+    sockaddr_in boardAddress{0};
     socklen_t boardAddressLen = sizeof(boardAddress);
 
     boardSocket = ::accept(
         masterSocket,
         reinterpret_cast<sockaddr *>(&boardAddress),
-        &boardAddressLen
-    );
-    if (boardSocket < 0) {
+        &boardAddressLen);
+    if (boardSocket < 0)
+    {
         printError("waitForBoardConnection::accept");
         return false;
     }
@@ -132,19 +132,21 @@ bool waitForBoardIDRequest(const Net::Socket boardSocket)
 
     char buffer[1024];
     const auto ret = ::recv(boardSocket, buffer, 1024, 0);
-    if (ret < 0) {
+    if (ret < 0)
+    {
         printError("waitForBoardIDRequest::recv");
         return false;
     }
     ReadablePacket requestFromBoard(std::begin(buffer), std::end(buffer));
     if (requestFromBoard.protocolType() == ProtocolType::Connection &&
-            requestFromBoard.commandAs<ConnectionCommand>() == ConnectionCommand::IDRequest) {
-                return true;
+        requestFromBoard.commandAs<ConnectionCommand>() == ConnectionCommand::IDRequest)
+    {
+        return true;
     }
     return false;
 }
 
-bool sendIDAssignementRequest(const Net::Socket boardSocket)
+bool sendBoardIDAssignement(const Net::Socket boardSocket)
 {
     using namespace Protocol;
 
@@ -154,16 +156,17 @@ bool sendIDAssignementRequest(const Net::Socket boardSocket)
     BoardID id = 123;
     IDAssignement << id;
     const auto ret = ::send(boardSocket, &IDAssignementBuffer, IDAssignement.totalSize(), 0);
-    if (ret < 0) {
+    if (ret < 0)
+    {
         printError("sendIDAssignementRequest::send");
         return false;
     }
     return true;
 }
 
-TEST(Scheduler, BoardConnection)
+TEST(Board, Connection)
 {
-    std::atomic<bool> started(false);
+    bool started = false;
     Scheduler scheduler({});
     std::thread thd([&scheduler, &started] {
         started = true;
@@ -173,21 +176,32 @@ TEST(Scheduler, BoardConnection)
 
     // Studio simulation:
 
-    Net::Socket broadcastSocket { -1 };
-    Net::Socket masterSocket { -1 };
-    Net::Socket boardSocket { -1 };
+    Net::Socket broadcastSocket{-1};
+    Net::Socket masterSocket{-1};
+    Net::Socket boardSocket{-1};
 
     ASSERT_TRUE(initBroadcastSocket(broadcastSocket));
     ASSERT_TRUE(emitBroadcastPacket(broadcastSocket));
     ASSERT_TRUE(initMasterSocket(masterSocket));
     ASSERT_TRUE(waitForBoardConnection(masterSocket, boardSocket));
     ASSERT_TRUE(waitForBoardIDRequest(boardSocket));
-    ASSERT_TRUE(sendIDAssignementRequest(boardSocket));
+    ASSERT_TRUE(sendBoardIDAssignement(boardSocket));
+
+    close(boardSocket);
+    close(masterSocket);
+    close(broadcastSocket);
 
     // Stop and join BoardApp
     std::cout << "[Test]\tStopping board thread" << std::endl;
     scheduler.stop();
     if (thd.joinable()) {
+        std::cout << "[Test]\tWaiting board thread..." << std::endl;
         thd.join();
+        std::cout << "[Test]\tBoard thread has exit" << std::endl;
     }
+}
+
+TEST(Board, Disconnection)
+{
+
 }

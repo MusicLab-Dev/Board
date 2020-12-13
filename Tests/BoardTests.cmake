@@ -5,7 +5,7 @@ find_package(GTest REQUIRED)
 get_filename_component(BoardTestsDir ${CMAKE_CURRENT_LIST_FILE} PATH)
 
 set(BoardTestsSources
-    ${BoardTestsDir}/tests_Scheduler.cpp
+    ${BoardTestsDir}/tests_Board.cpp
     ${BoardTestsDir}/tests_ConfigTable.cpp
 )
 

@@ -16,10 +16,12 @@ static bool Running = true;
  **/
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
 {
+    std::cout << "[Board]\tScheduler consctructor" << std::endl;
 }
 
 Scheduler::~Scheduler(void)
 {
+    std::cout << "[Board]\tScheduler destructor" << std::endl;
 }
 
 void Scheduler::run(void)

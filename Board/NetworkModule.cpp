@@ -31,6 +31,15 @@ NetworkModule::NetworkModule(void)
         _isBinded = true;
 }
 
+NetworkModule::~NetworkModule(void)
+{
+    std::cout << "[Board]\tNetworkModule destructor" << std::endl;
+
+    close(_usbBroadcastSocket);
+    shutdown(_masterSocket, SHUT_RDWR);
+    close(_masterSocket);
+}
+
 bool NetworkModule::tryToBindUsb(void)
 {
     // Define broadcast address
@@ -39,7 +48,7 @@ bool NetworkModule::tryToBindUsb(void)
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "0.0.0.0" : broadcastAddress.c_str())
+            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str())
         }
     };
 
@@ -49,21 +58,35 @@ bool NetworkModule::tryToBindUsb(void)
         sizeof(usbBroadcastAddress)
     );
 
-    if (ret < 0 && errno == 13)
+    if (ret < 0 && (errno == 13 || errno == 98))
         throw std::runtime_error(std::strerror(errno));
-    if (ret < 0)
+    if (ret < 0) {
         std::cout << "[Board]\ttryToBindUsb: USB broadcast address does not exist..." << std::endl;
+    }
     return ret == 0;
 }
 
-NetworkModule::~NetworkModule(void)
+void NetworkModule::processMaster(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule destructor" << std::endl;
+    std::cout << "[Board] NetworkModule::processMaster" << std::endl;
+
+    char buffer[1024];
+    const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
+    if (ret == 0) {
+        std::cout << "[Board] Disconnected from master" << std::endl;
+        close(_masterSocket);
+        _masterSocket = -1;
+        _boardID = 0u;
+        _connectionType = Protocol::ConnectionType::None;
+        _nodeDistance = 0u;
+        scheduler.setState(Scheduler::State::Disconnected);
+    }
 }
 
 void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::tick" << std::endl;
+    processMaster(scheduler);
     if (scheduler.state() != Scheduler::State::Connected)
         return;
     processClients(scheduler);
@@ -124,6 +147,8 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     _connectionType = masterEndpoint.connectionType;
     _nodeDistance = masterEndpoint.distance;
     scheduler.setState(Scheduler::State::Connected);
+
+    fcntl(_masterSocket, F_SETFL, O_NONBLOCK);
 }
 
 void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept
@@ -241,6 +266,7 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
     std::cout << "[Board]\tNetworkModule::discoveryEmit" << std::endl;
 
     Protocol::DiscoveryPacket packet;
+    packet.boardID = _boardID;
     packet.connectionType = _connectionType;
     packet.distance = _nodeDistance;
 
@@ -249,17 +275,20 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "0.0.0.0" : broadcastAddress.c_str())
+            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str())
         }
     };
-
-    ::sendto(
+    const auto ret = ::sendto(
         _usbBroadcastSocket,
         &packet,
         sizeof(Protocol::DiscoveryPacket),
         0,
-        reinterpret_cast<const sockaddr *>(&usbBroadcastAddress), sizeof(usbBroadcastAddress)
+        reinterpret_cast<const sockaddr *>(&usbBroadcastAddress),
+        sizeof(usbBroadcastAddress)
     );
+    if (ret < 0) {
+        std::cout << "[Board]\t NetworkModule::discoveryEmit::sendto failed: " << std::strerror(errno) << std::endl;
+    }
 }
 
 void NetworkModule::processClients(Scheduler &scheduler) noexcept

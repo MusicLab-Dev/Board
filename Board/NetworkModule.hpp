@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <Core/Vector.hpp>
 
@@ -81,6 +82,9 @@ private:
 
     /** @brief Listen to connected boards that are in client mode */
     void processClients(Scheduler &scheduler) noexcept;
+
+    /** @brief Process master connection */
+    void processMaster(Scheduler &scheduler);
 
     /** @brief Discovery function that read and process near board message */
     void discoveryScan(Scheduler &scheduler);
