@@ -93,6 +93,9 @@ private:
 
     /** @brief Init a new connection to a new master (server) endpoint */
     void initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept;
+
+    /** @brief Start ID request & assignement (blocking) procedure with the master */
+    void startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler);
 };
 
 static_assert_fit_cacheline(NetworkModule);

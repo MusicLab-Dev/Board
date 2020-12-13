@@ -87,11 +87,48 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
     discoveryScan(scheduler);
 }
 
+void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler)
+{
+    using namespace Protocol;
+
+    // ID request to sutdio
+    std::cout << "[Board]\tSending ID request packet..." << std::endl;
+    char IDRequestBuffer[sizeof(WritablePacket::Header)];
+    WritablePacket IDRequest(std::begin(IDRequestBuffer), std::end(IDRequestBuffer));
+    IDRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDRequest);
+    auto ret = ::send(_masterSocket, &IDRequestBuffer, IDRequest.totalSize(), 0);
+    if (ret < 0) {
+        std::cout << "[Board]\tinitNewMasterConnection::send failed: " << std::strerror(errno) << std::endl;
+        return;
+    }
+
+    // ID assignement from studio
+    std::cout << "[Board]\tWaiting for ID assignement packet..." << std::endl;
+    char IDAssignementBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    ret = ::read(_masterSocket, &IDAssignementBuffer, sizeof(IDAssignementBuffer));
+    if (ret < 0) {
+        std::cout << "[Board]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
+        return;
+    }
+    ReadablePacket IDAssignement(std::begin(IDAssignementBuffer), std::end(IDAssignementBuffer));
+    if (IDAssignement.protocolType() != ProtocolType::Connection ||
+            IDAssignement.commandAs<ConnectionCommand>() != ConnectionCommand::IDAssignement) {
+                std::cout << "[Board]\tInvalid ID assignement packet..." << std::endl;
+                return;
+    }
+    std::cout << "[Board]\tIDAssignement packet size: " << ret << std::endl;
+    _boardID = IDAssignement.extract<BoardID>();
+    std::cout << "[Board]\tAssigned BoardID from master: " << static_cast<int>(_boardID) << std::endl;
+
+    // Only if ID assignment is done correctly
+    _connectionType = masterEndpoint.connectionType;
+    _nodeDistance = masterEndpoint.distance;
+    scheduler.setState(Scheduler::State::Connected);
+}
+
 void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::initNewMasterConnection" << std::endl;
-
-    using namespace Protocol;
 
     if (_masterSocket) {
         ::close(_masterSocket);
@@ -118,37 +155,9 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
         std::cout << "[Board]\tinitNewMasterConnection::connect failed: " << strerror(errno) << std::endl;
         return;
     }
+
     std::cout << "[Board]\tConnected to studio master socket" << std::endl;
-
-    // ID request to sutdio
-    std::cout << "[Board]\tSending ID request packet..." << std::endl;
-    char IDRequestBuffer[sizeof(WritablePacket::Header)];
-    WritablePacket IDRequest(std::begin(IDRequestBuffer), std::end(IDRequestBuffer));
-    IDRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDRequest);
-    ::send(_masterSocket, &IDRequestBuffer, IDRequest.totalSize(), 0);
-
-    // ID assignement from studio
-    std::cout << "[Board]\tWaiting for ID assignement packet..." << std::endl;
-    char IDAssignementBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
-    ret = ::read(_masterSocket, &IDAssignementBuffer, sizeof(IDAssignementBuffer));
-    if (ret < 0) {
-        std::cout << "[Board]\tinitNewMasterConnection::read::read failed: " << std::strerror(errno) << std::endl;
-        return;
-    }
-    ReadablePacket IDAssignement(std::begin(IDAssignementBuffer), std::end(IDAssignementBuffer));
-    if (IDAssignement.protocolType() != ProtocolType::Connection ||
-            IDAssignement.commandAs<ConnectionCommand>() != ConnectionCommand::IDAssignement) {
-                std::cout << "[Board]\tInvalid ID assignement packet..." << std::endl;
-                return;
-    }
-    std::cout << "[Board]\tIDAssignement packet size: " << ret << std::endl;
-    const BoardID newID = IDAssignement.extract<BoardID>();
-    std::cout << "[Board]\tBoardID received: " << static_cast<int>(newID) << std::endl;
-
-    // Only if ID assignment is done correctly
-    _connectionType = masterEndpoint.connectionType;
-    _nodeDistance = masterEndpoint.distance;
-    scheduler.setState(Scheduler::State::Connected);
+    startIDRequestToMaster(masterEndpoint, scheduler);
     return;
 }
 
@@ -168,11 +177,9 @@ void NetworkModule::analyzeUsbEndpoints(const std::vector<Endpoint> &usbEndpoint
         }
         i++;
     }
-    if (_connectionType != Protocol::ConnectionType::USB &&
-        usbEndpoints.at(index).connectionType == Protocol::ConnectionType::USB) {
-        std::cout << "[Board]\tNew endpoint found for studio connection" << std::endl;
-        initNewMasterConnection(usbEndpoints.at(index), scheduler);
-    } else if (usbEndpoints.at(index).distance + 1 < _nodeDistance) {
+    if ((_connectionType != Protocol::ConnectionType::USB &&
+        usbEndpoints.at(index).connectionType == Protocol::ConnectionType::USB) ||
+        usbEndpoints.at(index).distance + 1 < _nodeDistance) {
         std::cout << "[Board]\tNew endpoint found for studio connection" << std::endl;
         initNewMasterConnection(usbEndpoints.at(index), scheduler);
     }
