@@ -49,7 +49,7 @@ inline void ConfigTable::parseLine(std::string &line)
     const auto keyLength = std::distance(line.begin(), it);
 
     if (it == line.end() || keyLength == 0)
-        throw std::logic_error("ConfigTable::parseLine: Invalid line\n\t'" + line + '\'');
+        throw std::logic_error("[Board]\tConfigTable::parseLine: Invalid line\n\t'" + line + '\'');
 
     _table.push(
         Core::Hash(std::string_view(line.data(), keyLength)),

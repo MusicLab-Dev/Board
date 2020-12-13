@@ -11,13 +11,18 @@
 #include <Board/Scheduler.hpp>
 #include <Protocol/Packet.hpp>
 
+void printError(const std::string &location)
+{
+    std::cout << "[Studio]\t" << location << " failed: " << std::strerror(errno) << std::endl;
+}
+
 bool initBroadcastSocket(Net::Socket &broadcastSocket)
 {
     // opening UDP broadcast socket
     int broadcast = 1;
     broadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (broadcastSocket < 0) {
-        std::cout << "Sutdio::initBroadcastSocket::socket failed: " << std::strerror(errno) << std::endl;
+        printError("initBroadcastSocket::socket");
         return false;
     }
     auto ret = ::setsockopt(
@@ -28,7 +33,7 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
         sizeof(broadcast)
     );
     if (ret < 0) {
-        std::cout << "Studio::initBroadcastSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
+        printError("initBroadcastSocket::setsockopt");
         return false;
     }
     return true;
@@ -58,7 +63,7 @@ bool emitBroadcastPacket(Net::Socket &broadcastSocket)
         sizeof(usbBroadcastAddress)
     );
     if (ret < 0) {
-        std::cout << "Studio::emitBroadcastPacket::sendto failed: " << std::strerror(errno) << std::endl;
+        printError("emitBroadcastPacket::sendto");
         return false;
     }
     return true;
@@ -69,13 +74,13 @@ bool initMasterSocket(Net::Socket &masterSocket)
     // open master socket
     masterSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (masterSocket < 0) {
-        std::cout << "Studio::initMasterSocket::socket failed: " << std::strerror(errno) << std::endl;
+        printError("initMasterSocket::socket");
         return false;
     }
     // set socket options for master socket
     int enable = 1;
     if (::setsockopt(masterSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-        std::cout << "Studio::initMasterSocket::setsockopt failed: " << std::strerror(errno) << std::endl;
+        printError("initMasterSocket::setsockopt");
         return false;
     }
     sockaddr_in studioAddress = {
@@ -92,13 +97,13 @@ bool initMasterSocket(Net::Socket &masterSocket)
         sizeof(studioAddress)
     );
     if (ret < 0) {
-        std::cout << "Studio::initMasterSocket::bind failed: " << std::strerror(errno) << std::endl;
+        printError("initMasterSocket::bind");
         close(masterSocket);
         return false;
     }
     ret = ::listen(masterSocket, 5);
     if (ret < 0) {
-        std::cout << "Studio::initMasterSocket::listen failed: " << std::strerror(errno) << std::endl;
+        printError("initMasterSocket::listen");
         return false;
     }
     return true;
@@ -115,7 +120,7 @@ bool waitForBoardConnection(const Net::Socket masterSocket, Net::Socket &boardSo
         &boardAddressLen
     );
     if (boardSocket < 0) {
-        std::cout << "Studio::waitForBoardConnection::accept failed: " << std::strerror(errno) << std::endl;
+        printError("waitForBoardConnection::accept");
         return false;
     }
     return true;
@@ -126,19 +131,34 @@ bool waitForBoardIDRequest(const Net::Socket boardSocket)
     using namespace Protocol;
 
     char buffer[1024];
-
     const auto ret = ::recv(boardSocket, buffer, 1024, 0);
     if (ret < 0) {
-        std::cout << "Studio::waitForBoardIDRequest::recv failed: " << std::strerror(errno) << std::endl;
+        printError("waitForBoardIDRequest::recv");
         return false;
     }
-
     ReadablePacket requestFromBoard(std::begin(buffer), std::end(buffer));
     if (requestFromBoard.protocolType() == ProtocolType::Connection &&
             requestFromBoard.commandAs<ConnectionCommand>() == ConnectionCommand::IDRequest) {
                 return true;
     }
     return false;
+}
+
+bool sendIDAssignementRequest(const Net::Socket boardSocket)
+{
+    using namespace Protocol;
+
+    char IDAssignementBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    WritablePacket IDAssignement(std::begin(IDAssignementBuffer), std::end(IDAssignementBuffer));
+    IDAssignement.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignement);
+    BoardID id = 123;
+    IDAssignement << id;
+    const auto ret = ::send(boardSocket, &IDAssignementBuffer, IDAssignement.totalSize(), 0);
+    if (ret < 0) {
+        printError("sendIDAssignementRequest::send");
+        return false;
+    }
+    return true;
 }
 
 TEST(Scheduler, BoardConnection)
@@ -162,9 +182,10 @@ TEST(Scheduler, BoardConnection)
     ASSERT_TRUE(initMasterSocket(masterSocket));
     ASSERT_TRUE(waitForBoardConnection(masterSocket, boardSocket));
     ASSERT_TRUE(waitForBoardIDRequest(boardSocket));
+    ASSERT_TRUE(sendIDAssignementRequest(boardSocket));
 
     // Stop and join BoardApp
-    std::cout << "stopping board thread" << std::endl;
+    std::cout << "[Test]\tStopping board thread" << std::endl;
     scheduler.stop();
     if (thd.joinable()) {
         thd.join();

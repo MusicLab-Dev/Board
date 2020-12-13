@@ -24,7 +24,7 @@ Scheduler::~Scheduler(void)
 
 void Scheduler::run(void)
 {
-    std::cout << "MLBoard running" << std::endl;
+    std::cout << "[Board]\tBoard running..." << std::endl;
 
     using namespace std::chrono;
 
