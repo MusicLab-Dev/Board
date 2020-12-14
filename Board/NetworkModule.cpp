@@ -117,6 +117,7 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     // Send ID assignment to master
     std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
     _buffer.clear();
+    std::cout << std::distance(_buffer.begin(), _buffer.end()) << std::endl;
     WritablePacket requestID(_buffer.begin(), _buffer.end());
     requestID.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
     if (!sendPacket(_masterSocket, requestID)) {
