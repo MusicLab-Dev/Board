@@ -26,7 +26,7 @@ jobs:
       env:
        CC:   gcc-10
        CXX:  g++-10
-      run: make run_coverage
+      run: sudo make run_coverage
 
     - name: Upload coverage
       working-directory: ${{github.workspace}}

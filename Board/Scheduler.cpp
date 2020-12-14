@@ -7,7 +7,7 @@
 
 #include "Scheduler.hpp"
 
-static bool Running = true;
+static bool Running = false;
 
 /**
  * Arguments:
@@ -31,7 +31,6 @@ void Scheduler::run(void)
     using namespace std::chrono;
 
     constexpr auto ProcessDiscovery = [](Scheduler &scheduler, auto &mod, auto &previousTime, const auto &currentTime) {
-
         const auto elapsedTime = static_cast<std::size_t>(duration_cast<nanoseconds>(currentTime - previousTime).count());
 
         if (elapsedTime >= mod.discoveryRate()) {
@@ -44,6 +43,8 @@ void Scheduler::run(void)
     steady_clock::time_point previousHardwareDiscovery {};
     steady_clock::time_point previousNetworkDiscovery {};
     steady_clock::time_point currentTime;
+
+    Running = true;
 
     while (Running) {
         currentTime = steady_clock::now();

@@ -27,15 +27,18 @@
 class alignas_cacheline NetworkModule : public Module
 {
 public:
+    /** @brief Size of the network buffer */
+    static constexpr std::size_t NetworkBufferSize = 1024;
+
+    /** @brief Network buffer used for all packet emission and reception */
+    using NetworkBuffer = Core::Vector<std::uint8_t, std::uint8_t>;
+
     struct Endpoint
     {
         Net::IP address { 0u };
         Protocol::ConnectionType connectionType { Protocol::ConnectionType::None };
         Protocol::NodeDistance distance { 0u };
     };
-
-    /** @brief Size of the ring buffer cache */
-    static constexpr std::uint32_t RingBufferSize { 4096 };
 
     /** @brief Data of a connected client */
     struct alignas_half_cacheline Client
@@ -44,7 +47,6 @@ public:
 
         Protocol::BoardID id { 0u };
         Net::Socket socket { 0 };
-        Core::Vector<Client, std::uint16_t> clients {};
     };
 
     static_assert_fit_half_cacheline(Client);
@@ -75,7 +77,7 @@ private:
     Net::Socket _usbBroadcastSocket { -1 };
     Net::Socket _masterSocket { -1 };
     Core::Vector<Client, std::uint16_t> _clients;
-    Core::Vector<std::uint8_t, std::uint16_t> _buffer; // To replace by ringbuffer
+    NetworkBuffer _buffer { NetworkBuffer(NetworkBufferSize) };
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
     [[nodiscard]] bool tryToBindUsb(void);
@@ -98,8 +100,29 @@ private:
     /** @brief Init a new connection to a new master (server) endpoint */
     void initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept;
 
-    /** @brief Start ID request & assignement (blocking) procedure with the master */
+    /** @brief Start ID request & assignment (blocking) procedure with the master */
     void startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler);
+
+    /** @brief Send a packet (ensure that everything is transmitted) */
+    [[nodiscard]] bool sendPacket(const Net::Socket socket, Protocol::WritablePacket &packet) noexcept
+    {
+        const auto total = packet.totalSize();
+        auto current = packet.totalSize();
+
+        do {
+            const auto size = ::send(
+                socket,
+                _buffer.data() + (total - current),
+                current,
+                0
+            );
+            if (size > 0) {
+                current -= size;
+            } else
+                return false;
+        } while (current);
+        return true;
+    }
 };
 
 static_assert_fit_cacheline(NetworkModule);

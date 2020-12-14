@@ -114,33 +114,32 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
 {
     using namespace Protocol;
 
-    // ID request to sutdio
-    std::cout << "[Board]\tSending ID request packet..." << std::endl;
-    char IDRequestBuffer[sizeof(WritablePacket::Header)];
-    WritablePacket IDRequest(std::begin(IDRequestBuffer), std::end(IDRequestBuffer));
-    IDRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDRequest);
-    auto ret = ::send(_masterSocket, &IDRequestBuffer, IDRequest.totalSize(), 0);
-    if (ret < 0) {
+    // Send ID assignment to master
+    std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
+    _buffer.clear();
+    WritablePacket requestID(_buffer.begin(), _buffer.end());
+    requestID.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
+    if (!sendPacket(_masterSocket, requestID)) {
         std::cout << "[Board]\tinitNewMasterConnection::send failed: " << std::strerror(errno) << std::endl;
         return;
     }
 
-    // ID assignement from studio
-    std::cout << "[Board]\tWaiting for ID assignement packet..." << std::endl;
-    char IDAssignementBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
-    ret = ::read(_masterSocket, &IDAssignementBuffer, sizeof(IDAssignementBuffer));
+    // ID assignment from master
+    std::cout << "[Board]\tWaiting for ID assignment packet..." << std::endl;
+    char IDAssignmentBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    auto ret = ::read(_masterSocket, &IDAssignmentBuffer, sizeof(IDAssignmentBuffer));
     if (ret < 0) {
         std::cout << "[Board]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
         return;
     }
-    ReadablePacket IDAssignement(std::begin(IDAssignementBuffer), std::end(IDAssignementBuffer));
-    if (IDAssignement.protocolType() != ProtocolType::Connection ||
-            IDAssignement.commandAs<ConnectionCommand>() != ConnectionCommand::IDAssignement) {
-                std::cout << "[Board]\tInvalid ID assignement packet..." << std::endl;
+    ReadablePacket IDAssignment(std::begin(IDAssignmentBuffer), std::end(IDAssignmentBuffer));
+    if (IDAssignment.protocolType() != ProtocolType::Connection ||
+            IDAssignment.commandAs<ConnectionCommand>() != ConnectionCommand::IDAssignment) {
+                std::cout << "[Board]\tInvalid ID assignment packet..." << std::endl;
                 return;
     }
-    std::cout << "[Board]\tIDAssignement packet size: " << ret << std::endl;
-    _boardID = IDAssignement.extract<BoardID>();
+    std::cout << "[Board]\tIDAssignment packet size: " << ret << std::endl;
+    _boardID = IDAssignment.extract<BoardID>();
     std::cout << "[Board]\tAssigned BoardID from master: " << static_cast<int>(_boardID) << std::endl;
 
     // Only if ID assignment is done correctly
