@@ -31,7 +31,7 @@ public:
     static constexpr std::size_t NetworkBufferSize = 1024;
 
     /** @brief Network buffer used for all packet emission and reception */
-    using NetworkBuffer = Core::Vector<std::uint8_t, std::uint8_t>;
+    using NetworkBuffer = Core::Vector<std::uint8_t, std::uint16_t>;
 
     struct Endpoint
     {
@@ -45,8 +45,10 @@ public:
     {
         ~Client(void) noexcept = default;
 
-        Protocol::BoardID id { 0u };
         Net::Socket socket { 0 };
+        Net::IP address { 0u };
+
+        Protocol::BoardID id { 0u };
     };
 
     static_assert_fit_half_cacheline(Client);
@@ -79,13 +81,19 @@ private:
     Net::Socket _slavesSocket { -1 }; // Socket used to exchange with multiple slaves (act as server)
 
     Core::Vector<Client, std::uint16_t> _clients;
-    NetworkBuffer _buffer { NetworkBuffer(NetworkBufferSize) };
+    NetworkBuffer _buffer;
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
     [[nodiscard]] bool tryToBindUdp(void);
 
-    /** @brief Listen to connected boards that are in client mode */
+    /** @brief Proccess data from connected boards that are in client mode */
     void processClients(Scheduler &scheduler);
+
+    /** @brief Accept and proccess new board connections */
+    void proccessNewClientConnections(Scheduler &scheduler);
+
+    /** @brief Handle a client board disconnection */
+    void handleClientDisconnection(Client *disconnectedClient);
 
     /** @brief Process master connection */
     void processMaster(Scheduler &scheduler);

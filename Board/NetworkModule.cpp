@@ -9,7 +9,7 @@
 
 #include "Scheduler.hpp"
 
-NetworkModule::NetworkModule(void)
+NetworkModule::NetworkModule(void) : _buffer(NetworkBufferSize)
 {
     std::cout << "[Board]\tNetworkModule constructor" << std::endl;
 
@@ -61,8 +61,10 @@ NetworkModule::~NetworkModule(void)
     std::cout << "[Board]\tNetworkModule destructor" << std::endl;
 
     close(_udpBroadcastSocket);
-    shutdown(_masterSocket, SHUT_RDWR);
-    close(_masterSocket);
+    if (_masterSocket != -1) {
+        shutdown(_masterSocket, SHUT_RDWR);
+        close(_masterSocket);
+    }
 }
 
 bool NetworkModule::tryToBindUdp(void)
@@ -131,8 +133,9 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
     if (scheduler.state() != Scheduler::State::Connected)
         return;
     processMaster(scheduler);
-    // if (scheduler.state() != Scheduler::State::Connected)
-    //     return;
+    if (scheduler.state() != Scheduler::State::Connected)
+        return;
+    proccessNewClientConnections(scheduler);
     processClients(scheduler);
 
     // Send hardware module data
@@ -161,7 +164,6 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
 
     // Send ID assignment to master
     std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
-    _buffer.clear();
     WritablePacket requestID(_buffer.begin(), _buffer.end());
     requestID.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
     if (!sendPacket(_masterSocket, requestID)) {
@@ -199,7 +201,7 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
 {
     std::cout << "[Board]\tNetworkModule::initNewMasterConnection" << std::endl;
 
-    if (_masterSocket) {
+    if (_masterSocket != -1) {
         ::close(_masterSocket);
         _masterSocket = -1;
     }
@@ -309,10 +311,12 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::discoveryEmit" << std::endl;
 
-    Protocol::DiscoveryPacket packet;
-    packet.boardID = _boardID;
-    packet.connectionType = _connectionType;
-    packet.distance = _nodeDistance;
+    Protocol::DiscoveryPacket packet = {
+        .magicKey = Protocol::SpecialLabMagicKey,
+        .boardID = _boardID,
+        .connectionType = _connectionType,
+        .distance = _nodeDistance
+    };
 
     const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
     sockaddr_in udpBroadcastAddress {
@@ -335,33 +339,76 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
     }
 }
 
-void NetworkModule::processClients(Scheduler &scheduler)
+void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule::processClients" << std::endl;
+    std::cout << "[Board]\tNetworkModule::proccessNewClientConnections" << std::endl;
 
     sockaddr_in clientAddress { 0 };
     socklen_t boardAddressLen = sizeof(clientAddress);
 
-    Net::Socket clientSocket = ::accept(
-        _slavesSocket,
-        reinterpret_cast<sockaddr *>(&clientAddress),
-        &boardAddressLen
-    );
-    if (clientSocket < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    while (1) {
+        // Accept a new board connection and retrieve the address
+        Net::Socket clientSocket = ::accept(
+            _slavesSocket,
+            reinterpret_cast<sockaddr *>(&clientAddress),
+            &boardAddressLen
+        );
+        // Loop end condition, until all pending connection are proccessed
+        if (clientSocket < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             std::cout << "[Board]\tNo new client board connection to proccess..." << std::endl;
             return;
-        }
-        throw std::runtime_error(std::strerror(errno));
+        } else if (clientSocket < 0)
+            throw std::runtime_error(std::strerror(errno));
+
+        std::cout << "[Board]\tNew board connection from " << inet_ntoa(clientAddress.sin_addr) << ":" << ntohs(clientAddress.sin_port) << std::endl;
+
+        // Filling new client struct
+        Client clientBoard = {
+            .socket = clientSocket,
+            .address = clientAddress.sin_addr.s_addr,
+            .id = 0u
+        };
+        _clients.push(clientBoard);
     }
-    std::cout << "[Board]\tNew board connection from " << inet_ntoa(clientAddress.sin_addr) << ":" << ntohs(clientAddress.sin_port) << std::endl;
+}
 
-    // Filling new client struct
-    Client clientBoard = {
-        .id = 0u,
-        .socket = clientSocket
-    };
-    _clients.push(clientBoard);
+void NetworkModule::processClients(Scheduler &scheduler)
+{
+    std::cout << "[Board]\tNetworkModule::processClients" << std::endl;
 
-    std::cout << "Exited processClients function" << std::endl;
+    if (_clients.empty()) {
+        std::cout << "[Board]\tNo connected board to proccess..." << std::endl;
+        return;
+    }
+
+    for (auto client = _clients.begin(); client != _clients.end(); client++) {
+
+        std::cout << "[Board]\tProccessing client: " << inet_ntoa(in_addr { client->address }) << std::endl;
+
+        // test only
+        char buffer[1024];
+        std::memset(buffer, 0, 1024);
+
+        const auto ret = recv(client->socket, &buffer, 1024, MSG_DONTWAIT);
+        if (ret < 0) {
+            if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { // No data to proccess for this client
+                std::cout << "[Board]\tNo data to process from this client..." << std::endl;
+                continue;
+            }
+            else if (ret < 0) // Error will reading from client socket
+                throw std::runtime_error(std::strerror(errno));
+        } else if (ret == 0) { // Client board disconnection detected
+            std::cout << "[Board]\tClient board disconnection detected" << std::endl;
+            _clients.erase(client);
+            return;
+        }
+
+        std::cout << "[Board]\tReceived " << ret << " bytes from client" << std::endl;
+        std::cout << buffer << std::endl;
+    }
+}
+
+void NetworkModule::handleClientDisconnection(Client *disconnectedClient)
+{
+    std::cout << "[Board]\tNetworkModule::handleClientDisconnection" << std::endl;
 }

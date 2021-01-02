@@ -41,18 +41,23 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
 
 bool emitBroadcastPacket(Net::Socket &broadcastSocket)
 {
-    sockaddr_in usbBroadcastAddress{
+    sockaddr_in usbBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
-            .s_addr = ::inet_addr("127.0.0.1")
-        }
+            .s_addr = ::inet_addr("127.0.0.1"),
+        },
+        .sin_zero = { 0u }
     };
 
     Protocol::DiscoveryPacket packet;
-    packet.boardID = static_cast<Protocol::BoardID>(420);
-    packet.connectionType = Protocol::ConnectionType::USB;
-    packet.distance = 0;
+    std::memset(&packet, 0, sizeof(packet));
+    packet = {
+        .magicKey = Protocol::SpecialLabMagicKey,
+        .boardID = static_cast<Protocol::BoardID>(420),
+        .connectionType = Protocol::ConnectionType::USB,
+        .distance = 0,
+    };
 
     auto ret = ::sendto(
         broadcastSocket,
