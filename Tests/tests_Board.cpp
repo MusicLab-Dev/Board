@@ -111,7 +111,7 @@ bool initMasterSocket(Net::Socket &masterSocket)
 
 bool waitForBoardConnection(const Net::Socket masterSocket, Net::Socket &boardSocket)
 {
-    sockaddr_in boardAddress{0};
+    sockaddr_in boardAddress { 0 };
     socklen_t boardAddressLen = sizeof(boardAddress);
 
     boardSocket = ::accept(

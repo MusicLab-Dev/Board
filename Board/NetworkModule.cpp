@@ -15,11 +15,11 @@ NetworkModule::NetworkModule(void)
 
     // Open UDP broadcast socket
     int broadcast = 1;
-    _usbBroadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (_usbBroadcastSocket < 0)
+    _udpBroadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (_udpBroadcastSocket < 0)
         throw std::runtime_error(std::strerror(errno));
-    const auto ret = ::setsockopt(
-        _usbBroadcastSocket,
+    auto ret = ::setsockopt(
+        _udpBroadcastSocket,
         SOL_SOCKET,
         SO_BROADCAST,
         &broadcast,
@@ -27,24 +27,49 @@ NetworkModule::NetworkModule(void)
     );
     if (ret < 0)
         throw std::runtime_error(std::strerror(errno));
-    if (tryToBindUsb())
+    if (tryToBindUdp())
         _isBinded = true;
+
+    // Open TCP slaves socket in non-blocking mode (O_NONBLOCK)
+    _slavesSocket = socket(AF_INET, SOCK_STREAM | O_NONBLOCK, 0);
+    if (_slavesSocket < 0)
+        throw std::runtime_error(std::strerror(errno));
+    sockaddr_in localAddress = {
+        .sin_family = AF_INET,
+        .sin_port = ::htons(420),
+        .sin_addr = {
+            .s_addr = ::htonl(INADDR_ANY)
+        }
+    };
+    // bind localAddress to _slavesSocket
+    ret = ::bind(
+        _slavesSocket,
+        reinterpret_cast<const sockaddr *>(&localAddress),
+        sizeof(localAddress)
+    );
+    if (ret < 0) {
+        close(_slavesSocket);
+        throw std::runtime_error(std::strerror(errno));
+    }
+    ret = ::listen(_slavesSocket, 5);
+    if (ret < 0)
+        throw std::runtime_error(std::strerror(errno));
 }
 
 NetworkModule::~NetworkModule(void)
 {
     std::cout << "[Board]\tNetworkModule destructor" << std::endl;
 
-    close(_usbBroadcastSocket);
+    close(_udpBroadcastSocket);
     shutdown(_masterSocket, SHUT_RDWR);
     close(_masterSocket);
 }
 
-bool NetworkModule::tryToBindUsb(void)
+bool NetworkModule::tryToBindUdp(void)
 {
-    // Define broadcast address
+    // Define UDP broadcast address
     const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
-    sockaddr_in usbBroadcastAddress {
+    sockaddr_in udpBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
@@ -53,43 +78,63 @@ bool NetworkModule::tryToBindUsb(void)
     };
 
     const auto ret = ::bind(
-        _usbBroadcastSocket,
-        reinterpret_cast<const sockaddr *>(&usbBroadcastAddress),
-        sizeof(usbBroadcastAddress)
+        _udpBroadcastSocket,
+        reinterpret_cast<const sockaddr *>(&udpBroadcastAddress),
+        sizeof(udpBroadcastAddress)
     );
 
     if (ret < 0 && (errno == 13 || errno == 98))
         throw std::runtime_error(std::strerror(errno));
     if (ret < 0) {
-        std::cout << "[Board]\ttryToBindUsb: USB broadcast address does not exist..." << std::endl;
+        std::cout << "[Board]\ttryToBindUdp: UDP broadcast address does not exist..." << std::endl;
     }
     return ret == 0;
 }
 
+void NetworkModule::notifyDisconnectionToClients(void)
+{
+    std::cout << "[Board]\tNetworkModule::notifyDisconnectionToClients" << std::endl;
+
+    if (_clients.empty()) {
+        std::cout << "[Board]\tNo client board to notify..." << std::endl;
+        return;
+    }
+    for (const auto client : _clients) {
+        close(client.socket);
+    }
+    _clients.clear();
+}
+
 void NetworkModule::processMaster(Scheduler &scheduler)
 {
-    std::cout << "[Board] NetworkModule::processMaster" << std::endl;
+    std::cout << "[Board]\tNetworkModule::processMaster" << std::endl;
 
     char buffer[1024];
+    // Proccess master input, read must be non-blocking
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
     if (ret == 0) {
-        std::cout << "[Board] Disconnected from master" << std::endl;
+        std::cout << "[Board]\tDisconnected from master" << std::endl;
         close(_masterSocket);
         _masterSocket = -1;
         _boardID = 0u;
         _connectionType = Protocol::ConnectionType::None;
         _nodeDistance = 0u;
         scheduler.setState(Scheduler::State::Disconnected);
+        notifyDisconnectionToClients();
     }
 }
 
 void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::tick" << std::endl;
-    processMaster(scheduler);
+
     if (scheduler.state() != Scheduler::State::Connected)
         return;
+    processMaster(scheduler);
+    // if (scheduler.state() != Scheduler::State::Connected)
+    //     return;
     processClients(scheduler);
+
     // Send hardware module data
 }
 
@@ -99,7 +144,7 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
 
     // Check if the broadcast socket is binded
     if (!_isBinded) {
-        if (!tryToBindUsb())
+        if (!tryToBindUdp())
             return;
         _isBinded = true;
     }
@@ -117,7 +162,6 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     // Send ID assignment to master
     std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
     _buffer.clear();
-    std::cout << std::distance(_buffer.begin(), _buffer.end()) << std::endl;
     WritablePacket requestID(_buffer.begin(), _buffer.end());
     requestID.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
     if (!sendPacket(_masterSocket, requestID)) {
@@ -186,27 +230,27 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
     return;
 }
 
-void NetworkModule::analyzeUsbEndpoints(const std::vector<Endpoint> &usbEndpoints, Scheduler &scheduler) noexcept
+void NetworkModule::analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoints, Scheduler &scheduler) noexcept
 {
-    std::cout << "[Board]\tNetworkModule::analyzeUsbEndpoints" << std::endl;
+    std::cout << "[Board]\tNetworkModule::analyzeUdpEndpoints" << std::endl;
 
     std::size_t index = 0;
     std::size_t i = 0;
 
-    for (const auto &endpoint : usbEndpoints) {
-        if (usbEndpoints.at(index).connectionType != Protocol::ConnectionType::USB &&
+    for (const auto &endpoint : udpEndpoints) {
+        if (udpEndpoints.at(index).connectionType != Protocol::ConnectionType::USB &&
             endpoint.connectionType == Protocol::ConnectionType::USB) {
             index = i;
-        } else if (endpoint.distance < usbEndpoints.at(index).distance) {
+        } else if (endpoint.distance < udpEndpoints.at(index).distance) {
             index = i;
         }
         i++;
     }
     if ((_connectionType != Protocol::ConnectionType::USB &&
-        usbEndpoints.at(index).connectionType == Protocol::ConnectionType::USB) ||
-        usbEndpoints.at(index).distance + 1 < _nodeDistance) {
+        udpEndpoints.at(index).connectionType == Protocol::ConnectionType::USB) ||
+        udpEndpoints.at(index).distance + 1 < _nodeDistance) {
         std::cout << "[Board]\tNew endpoint found for studio connection" << std::endl;
-        initNewMasterConnection(usbEndpoints.at(index), scheduler);
+        initNewMasterConnection(udpEndpoints.at(index), scheduler);
     }
 }
 
@@ -214,33 +258,33 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
 {
     std::cout << "[Board]\tNetworkModule::discoveryScan" << std::endl;
 
-    sockaddr_in usbSenderAddress;
-    int usbSenderAddressLength = sizeof(usbSenderAddress);
+    sockaddr_in udpSenderAddress;
+    int udpSenderAddressLength = sizeof(udpSenderAddress);
 
     Protocol::DiscoveryPacket packet;
-    std::vector<Endpoint> usbEndpoints;
+    std::vector<Endpoint> udpEndpoints;
 
     while (1) {
         const auto size = ::recvfrom(
-            _usbBroadcastSocket,
+            _udpBroadcastSocket,
             &packet,
             sizeof(Protocol::DiscoveryPacket),
             MSG_WAITALL | MSG_DONTWAIT,
-            reinterpret_cast<sockaddr *>(&usbSenderAddress),
-            reinterpret_cast<socklen_t *>(&usbSenderAddressLength)
+            reinterpret_cast<sockaddr *>(&udpSenderAddress),
+            reinterpret_cast<socklen_t *>(&udpSenderAddressLength)
         );
         std::cout << "[Board]\tNetworkModule::discoveryScan::recvfrom: " << size << std::endl;
 
         // Loop end condition, until read buffer is empty
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             std::cout << "[Board]\tNetworkModule::discoveryScan: nothing remaining on the socket" << std::endl;
-            if (scheduler.state() != Scheduler::State::Connected && !usbEndpoints.empty())
-                analyzeUsbEndpoints(usbEndpoints, scheduler);
+            if (scheduler.state() != Scheduler::State::Connected && !udpEndpoints.empty())
+                analyzeUdpEndpoints(udpEndpoints, scheduler);
             return;
         } else if (size < 0)
             throw std::runtime_error(std::strerror(errno));
 
-        // Ignore unknow and self broadcasted packets
+        // Ignore unknown and self broadcasted packets
         if (packet.magicKey != Protocol::SpecialLabMagicKey || packet.boardID == _boardID) {
             std::cout << "[Board]\tNetworkModule::discoveryScan: ignoring packet" << std::endl;
             continue;
@@ -249,15 +293,15 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
         // Debug
         char senderAddressString[100];
         std::memset(senderAddressString, 0, 100);
-        ::inet_ntop(AF_INET, &(usbSenderAddress.sin_addr), senderAddressString, 100);
-        std::cout << "[Board]\tNetworkModule::discoveryScan: USB DiscoveryPacket received from " << senderAddressString << std::endl;
+        ::inet_ntop(AF_INET, &(udpSenderAddress.sin_addr), senderAddressString, 100);
+        std::cout << "[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from " << senderAddressString << std::endl;
 
         Endpoint endpoint {
-            .address = usbSenderAddress.sin_addr.s_addr,
+            .address = udpSenderAddress.sin_addr.s_addr,
             .connectionType = packet.connectionType,
             .distance = packet.distance
         };
-        usbEndpoints.push_back(endpoint);
+        udpEndpoints.push_back(endpoint);
     }
 }
 
@@ -271,7 +315,7 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
     packet.distance = _nodeDistance;
 
     const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
-    sockaddr_in usbBroadcastAddress {
+    sockaddr_in udpBroadcastAddress {
         .sin_family = AF_INET,
         .sin_port = ::htons(420),
         .sin_addr = {
@@ -279,19 +323,45 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
         }
     };
     const auto ret = ::sendto(
-        _usbBroadcastSocket,
+        _udpBroadcastSocket,
         &packet,
         sizeof(Protocol::DiscoveryPacket),
         0,
-        reinterpret_cast<const sockaddr *>(&usbBroadcastAddress),
-        sizeof(usbBroadcastAddress)
+        reinterpret_cast<const sockaddr *>(&udpBroadcastAddress),
+        sizeof(udpBroadcastAddress)
     );
     if (ret < 0) {
         std::cout << "[Board]\t NetworkModule::discoveryEmit::sendto failed: " << std::strerror(errno) << std::endl;
     }
 }
 
-void NetworkModule::processClients(Scheduler &scheduler) noexcept
+void NetworkModule::processClients(Scheduler &scheduler)
 {
     std::cout << "[Board]\tNetworkModule::processClients" << std::endl;
+
+    sockaddr_in clientAddress { 0 };
+    socklen_t boardAddressLen = sizeof(clientAddress);
+
+    Net::Socket clientSocket = ::accept(
+        _slavesSocket,
+        reinterpret_cast<sockaddr *>(&clientAddress),
+        &boardAddressLen
+    );
+    if (clientSocket < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            std::cout << "[Board]\tNo new client board connection to proccess..." << std::endl;
+            return;
+        }
+        throw std::runtime_error(std::strerror(errno));
+    }
+    std::cout << "[Board]\tNew board connection from " << inet_ntoa(clientAddress.sin_addr) << ":" << ntohs(clientAddress.sin_port) << std::endl;
+
+    // Filling new client struct
+    Client clientBoard = {
+        .id = 0u,
+        .socket = clientSocket
+    };
+    _clients.push(clientBoard);
+
+    std::cout << "Exited processClients function" << std::endl;
 }

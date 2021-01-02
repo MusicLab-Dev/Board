@@ -74,16 +74,18 @@ private:
     Protocol::NodeDistance _nodeDistance { 0u };
     bool _isBinded { false };
 
-    Net::Socket _usbBroadcastSocket { -1 };
-    Net::Socket _masterSocket { -1 };
+    Net::Socket _udpBroadcastSocket { -1 }; // Socket used to send and receive msg over UDP
+    Net::Socket _masterSocket { -1 }; // Socket used to exchange with master (act as client)
+    Net::Socket _slavesSocket { -1 }; // Socket used to exchange with multiple slaves (act as server)
+
     Core::Vector<Client, std::uint16_t> _clients;
     NetworkBuffer _buffer { NetworkBuffer(NetworkBufferSize) };
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
-    [[nodiscard]] bool tryToBindUsb(void);
+    [[nodiscard]] bool tryToBindUdp(void);
 
     /** @brief Listen to connected boards that are in client mode */
-    void processClients(Scheduler &scheduler) noexcept;
+    void processClients(Scheduler &scheduler);
 
     /** @brief Process master connection */
     void processMaster(Scheduler &scheduler);
@@ -91,17 +93,20 @@ private:
     /** @brief Discovery function that read and process near board message */
     void discoveryScan(Scheduler &scheduler);
 
-    /** @brief Discovery function that emit on usb broadcast address */
+    /** @brief Discovery function that emit on UDP broadcast address */
     void discoveryEmit(Scheduler &scheduler) noexcept;
 
-    /** @brief Analyse every available usb endpoints */
-    void analyzeUsbEndpoints(const std::vector<Endpoint> &usbEndpoints, Scheduler &scheduler) noexcept;
+    /** @brief Analyse every available UDP endpoints */
+    void analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoints, Scheduler &scheduler) noexcept;
 
     /** @brief Init a new connection to a new master (server) endpoint */
     void initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept;
 
     /** @brief Start ID request & assignment (blocking) procedure with the master */
     void startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler);
+
+    /** @brief Notify boards that connection with the studio has been lost & close all clients */
+    void notifyDisconnectionToClients(void);
 
     /** @brief Send a packet (ensure that everything is transmitted) */
     [[nodiscard]] bool sendPacket(const Net::Socket socket, Protocol::WritablePacket &packet) noexcept
