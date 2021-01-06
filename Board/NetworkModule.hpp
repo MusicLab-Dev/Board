@@ -102,7 +102,6 @@ private:
     /** @brief Transfer all processed data from the transfer buffer to the master endpoint (STEP 3) */
     void transferToMaster(Scheduler &scheduler);
 
-
     /** @brief Read data from a specific connection and place it into the reception buffer at bufferIndex (STEP 3) */
     bool readDataFromClient(Client *client, std::size_t &bufferIndex);
 

@@ -397,7 +397,7 @@ void NetworkModule::readClients(Scheduler &scheduler)
     std::size_t assignIndex { 0 };
     std::size_t slavesIndex { InputOffset };
 
-    for (auto client = _clients.begin(); client != _clients.end(); client++) {
+    for (auto client = _clients.begin(); client != _clients.end(); ) {
 
         std::cout << "[Board]\tProccessing client: "
         << inet_ntoa(in_addr { client->address })
@@ -406,9 +406,10 @@ void NetworkModule::readClients(Scheduler &scheduler)
 
         if (client->id == 0) { // Client in "assignation mode"
             readDataFromClient(client, assignIndex);
-            continue;
-        }
-        readDataFromClient(client, slavesIndex); // Client in "input mode"
+        } else
+            readDataFromClient(client, slavesIndex); // Client in "input mode"
+        if (client != _clients.end())
+            client++;
     }
 }
 
