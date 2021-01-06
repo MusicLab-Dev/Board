@@ -9,7 +9,7 @@
 
 #include "Scheduler.hpp"
 
-NetworkModule::NetworkModule(void) : _buffer(NetworkBufferSize)
+NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
 {
     std::cout << "[Board]\tNetworkModule constructor" << std::endl;
 
@@ -130,13 +130,19 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::tick" << std::endl;
 
-    if (scheduler.state() != Scheduler::State::Connected)
+    if (scheduler.state() != Scheduler::State::Connected) // If connected, process master and clients
         return;
+
     processMaster(scheduler);
-    if (scheduler.state() != Scheduler::State::Connected)
+
+    if (scheduler.state() != Scheduler::State::Connected) // If master has been disconnected, return
         return;
+
     proccessNewClientConnections(scheduler);
-    processClients(scheduler);
+
+    readClients(scheduler);
+    processClientsData(scheduler);
+    transferToMaster(scheduler);
 
     // Send hardware module data
 }
@@ -162,18 +168,22 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
 {
     using namespace Protocol;
 
+    char IDAssignmentBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+
     // Send ID assignment to master
     std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
-    WritablePacket requestID(_buffer.begin(), _buffer.end());
+
+    WritablePacket requestID(std::begin(IDAssignmentBuffer), std::begin(IDAssignmentBuffer));
     requestID.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
-    if (!sendPacket(_masterSocket, requestID)) {
+    if (!send(_masterSocket, &IDAssignmentBuffer, requestID.totalSize(), 0)) {
         std::cout << "[Board]\tinitNewMasterConnection::send failed: " << std::strerror(errno) << std::endl;
         return;
     }
 
-    // ID assignment from master
-    std::cout << "[Board]\tWaiting for ID assignment packet..." << std::endl;
-    char IDAssignmentBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    // Wait for ID assignation from master
+    std::cout << "[Board]\tWaiting for ID assignment packet from master..." << std::endl;
+
+    std::memset(&IDAssignmentBuffer, 0, sizeof(IDAssignmentBuffer));
     auto ret = ::read(_masterSocket, &IDAssignmentBuffer, sizeof(IDAssignmentBuffer));
     if (ret < 0) {
         std::cout << "[Board]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
@@ -185,6 +195,7 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
                 std::cout << "[Board]\tInvalid ID assignment packet..." << std::endl;
                 return;
     }
+
     std::cout << "[Board]\tIDAssignment packet size: " << ret << std::endl;
     _boardID = IDAssignment.extract<BoardID>();
     std::cout << "[Board]\tAssigned BoardID from master: " << static_cast<int>(_boardID) << std::endl;
@@ -366,49 +377,75 @@ void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
         Client clientBoard = {
             .socket = clientSocket,
             .address = clientAddress.sin_addr.s_addr,
+            .port = clientAddress.sin_port,
             .id = 0u
         };
         _clients.push(clientBoard);
     }
 }
 
-void NetworkModule::processClients(Scheduler &scheduler)
+void NetworkModule::readClients(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule::processClients" << std::endl;
+    std::cout << "[Board]\tNetworkModule::readClients" << std::endl;
 
+    // Return if there is no client board(s)
     if (_clients.empty()) {
         std::cout << "[Board]\tNo connected board to proccess..." << std::endl;
         return;
     }
 
+    std::size_t assignIndex { 0 };
+    std::size_t slavesIndex { InputOffset };
+
     for (auto client = _clients.begin(); client != _clients.end(); client++) {
 
-        std::cout << "[Board]\tProccessing client: " << inet_ntoa(in_addr { client->address }) << std::endl;
+        std::cout << "[Board]\tProccessing client: "
+        << inet_ntoa(in_addr { client->address })
+        << ":" << ntohs(client->port)
+        << " with boardID = " << static_cast<int>(client->id) << std::endl;
 
-        // test only
-        char buffer[1024];
-        std::memset(buffer, 0, 1024);
-
-        const auto ret = recv(client->socket, &buffer, 1024, MSG_DONTWAIT);
-        if (ret < 0) {
-            if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { // No data to proccess for this client
-                std::cout << "[Board]\tNo data to process from this client..." << std::endl;
-                continue;
-            }
-            else if (ret < 0) // Error will reading from client socket
-                throw std::runtime_error(std::strerror(errno));
-        } else if (ret == 0) { // Client board disconnection detected
-            std::cout << "[Board]\tClient board disconnection detected" << std::endl;
-            _clients.erase(client);
-            return;
+        if (client->id == 0) { // Client in "assignation mode"
+            readDataFromClient(client, assignIndex);
+            continue;
         }
-
-        std::cout << "[Board]\tReceived " << ret << " bytes from client" << std::endl;
-        std::cout << buffer << std::endl;
+        readDataFromClient(client, slavesIndex); // Client in "input mode"
     }
 }
 
-void NetworkModule::handleClientDisconnection(Client *disconnectedClient)
+void NetworkModule::processClientsData(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule::handleClientDisconnection" << std::endl;
+    std::cout << "[Board]\tNetworkModule::processClientsData" << std::endl;
+
+}
+
+void NetworkModule::transferToMaster(Scheduler &scheduler)
+{
+    std::cout << "[Board]\tNetworkModule::transferToMaster" << std::endl;
+
+}
+
+bool NetworkModule::readDataFromClient(Client *client, std::size_t &bufferIndex)
+{
+    auto bufferPtr = _networkBuffer.data() + bufferIndex;
+
+    const auto ret = ::recv(client->socket, bufferPtr, 1024, MSG_DONTWAIT);
+
+    if (ret < 0) {
+        if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { // No data to proccess for this client
+            std::cout << "[Board]\tNo data to process from this client..." << std::endl;
+            return false;
+        } else if (ret < 0) { // Error will reading from client socket
+            std::cout << "[Board]\tError reading data from client" << std::endl;
+            return false;
+        }
+    } else if (ret == 0) { // Client board disconnection detected
+        std::cout << "[Board]\tClient board disconnection detected" << std::endl;
+        _clients.erase(client);
+        return false;
+    }
+
+    std::cout << "[Board]\tReceived " << ret << " bytes from client" << std::endl;
+    bufferIndex += ret; // Increment specific index for next read operation
+
+    return true;
 }

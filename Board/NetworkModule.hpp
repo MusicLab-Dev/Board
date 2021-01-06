@@ -27,8 +27,12 @@
 class alignas_cacheline NetworkModule : public Module
 {
 public:
-    /** @brief Size of the network buffer */
-    static constexpr std::size_t NetworkBufferSize = 1024;
+    /** @brief Size of the network buffers */
+    static constexpr std::size_t ReceptionBufferSize = 4096;
+    static constexpr std::size_t TransferBufferSize = 8192;
+    static constexpr std::size_t NetworkBufferSize = ReceptionBufferSize + TransferBufferSize;
+
+    static constexpr std::size_t InputOffset = 1024;
 
     /** @brief Network buffer used for all packet emission and reception */
     using NetworkBuffer = Core::Vector<std::uint8_t, std::uint16_t>;
@@ -45,8 +49,10 @@ public:
     {
         ~Client(void) noexcept = default;
 
+        // Client network informations
         Net::Socket socket { 0 };
         Net::IP address { 0u };
+        Net::Port port { 0u };
 
         Protocol::BoardID id { 0u };
     };
@@ -81,22 +87,35 @@ private:
     Net::Socket _slavesSocket { -1 }; // Socket used to exchange with multiple slaves (act as server)
 
     Core::Vector<Client, std::uint16_t> _clients;
-    NetworkBuffer _buffer;
 
-    /** @brief Try to bind previouly opened UDP broadcast socket */
-    [[nodiscard]] bool tryToBindUdp(void);
+    NetworkBuffer _networkBuffer;
 
-    /** @brief Proccess data from connected boards that are in client mode */
-    void processClients(Scheduler &scheduler);
+    // std::uint16_t read_index { 0 };
+    // std::uint16_t write_index { 0 };
+
+    /** @brief Read data from connected boards that are in client mode (STEP 1) */
+    void readClients(Scheduler &scheduler);
+
+    /** @brief Process data from the reception buffer & place the result into the transfer buffer (STEP 2) */
+    void processClientsData(Scheduler &scheduler);
+
+    /** @brief Transfer all processed data from the transfer buffer to the master endpoint (STEP 3) */
+    void transferToMaster(Scheduler &scheduler);
+
+
+    /** @brief Read data from a specific connection and place it into the reception buffer at bufferIndex (STEP 3) */
+    bool readDataFromClient(Client *client, std::size_t &bufferIndex);
+
 
     /** @brief Accept and proccess new board connections */
     void proccessNewClientConnections(Scheduler &scheduler);
 
-    /** @brief Handle a client board disconnection */
-    void handleClientDisconnection(Client *disconnectedClient);
-
     /** @brief Process master connection */
     void processMaster(Scheduler &scheduler);
+
+
+    /** @brief Try to bind previouly opened UDP broadcast socket */
+    [[nodiscard]] bool tryToBindUdp(void);
 
     /** @brief Discovery function that read and process near board message */
     void discoveryScan(Scheduler &scheduler);
@@ -117,25 +136,25 @@ private:
     void notifyDisconnectionToClients(void);
 
     /** @brief Send a packet (ensure that everything is transmitted) */
-    [[nodiscard]] bool sendPacket(const Net::Socket socket, Protocol::WritablePacket &packet) noexcept
-    {
-        const auto total = packet.totalSize();
-        auto current = packet.totalSize();
+    // [[nodiscard]] bool sendPacket(const Net::Socket socket, Protocol::WritablePacket &packet) noexcept
+    // {
+    //     const auto total = packet.totalSize();
+    //     auto current = packet.totalSize();
 
-        do {
-            const auto size = ::send(
-                socket,
-                _buffer.data() + (total - current),
-                current,
-                0
-            );
-            if (size > 0) {
-                current -= size;
-            } else
-                return false;
-        } while (current);
-        return true;
-    }
+    //     do {
+    //         const auto size = ::send(
+    //             socket,
+    //             _buffer.data() + (total - current),
+    //             current,
+    //             0
+    //         );
+    //         if (size > 0) {
+    //             current -= size;
+    //         } else
+    //             return false;
+    //     } while (current);
+    //     return true;
+    // }
 };
 
 static_assert_fit_cacheline(NetworkModule);
