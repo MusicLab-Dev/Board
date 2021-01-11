@@ -28,11 +28,25 @@ class alignas_cacheline NetworkModule : public Module
 {
 public:
     /** @brief Size of the network buffers */
-    static constexpr std::size_t ReceptionBufferSize = 4096;
     static constexpr std::size_t TransferBufferSize = 8192;
-    static constexpr std::size_t NetworkBufferSize = ReceptionBufferSize + TransferBufferSize;
+    static constexpr std::size_t ReceptionBufferSize = 4096;
+    static constexpr std::size_t NetworkBufferSize = TransferBufferSize + ReceptionBufferSize;
 
-    static constexpr std::size_t InputOffset = 1024;
+    static constexpr std::size_t AssignAreaSize = 256;
+    static constexpr std::size_t InputsAreaSize = 3840;
+
+    static constexpr std::size_t AssignOffset = TransferBufferSize;
+    static constexpr std::size_t InputsOffset = TransferBufferSize + AssignAreaSize;
+
+    /*
+
+        |     TRANSFER [8192]    |            RECEPTION [4096]             |
+        |                        |                                         |
+        |                        |     Assign [256]        Inputs [3840]   |
+        |________________________|____________________|____________________|
+
+                                    TOTAL [12288]
+    */
 
     /** @brief Network buffer used for all packet emission and reception */
     using NetworkBuffer = Core::Vector<std::uint8_t, std::uint16_t>;
@@ -102,9 +116,9 @@ private:
     /** @brief Transfer all processed data from the transfer buffer to the master endpoint (STEP 3) */
     void transferToMaster(Scheduler &scheduler);
 
-    /** @brief Read data from a specific connection and place it into the reception buffer at bufferIndex (STEP 3) */
-    bool readDataFromClient(Client *client, std::size_t &bufferIndex);
 
+    /** @brief Read data from a specific connection and place it into the reception buffer at receptionIndex */
+    bool readDataFromClient(Client *client, std::size_t &receptionIndex);
 
     /** @brief Accept and proccess new board connections */
     void proccessNewClientConnections(Scheduler &scheduler);

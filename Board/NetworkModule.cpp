@@ -394,8 +394,8 @@ void NetworkModule::readClients(Scheduler &scheduler)
         return;
     }
 
-    std::size_t assignIndex { 0 };
-    std::size_t slavesIndex { InputOffset };
+    std::size_t assignIndex { AssignOffset };
+    std::size_t inputsIndex { InputsOffset };
 
     for (auto client = _clients.begin(); client != _clients.end(); ) {
 
@@ -404,10 +404,11 @@ void NetworkModule::readClients(Scheduler &scheduler)
         << ":" << ntohs(client->port)
         << " with boardID = " << static_cast<int>(client->id) << std::endl;
 
-        if (client->id == 0) { // Client in "assignation mode"
-            readDataFromClient(client, assignIndex);
+        if (client->id == 0) {
+            readDataFromClient(client, assignIndex);        // Client in "assign mode"
         } else
-            readDataFromClient(client, slavesIndex); // Client in "input mode"
+            readDataFromClient(client, inputsIndex);        // Client in "inputs mode"
+
         if (client != _clients.end())
             client++;
     }
@@ -417,6 +418,10 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
 {
     std::cout << "[Board]\tNetworkModule::processClientsData" << std::endl;
 
+    // 1 - Process inputs from client board(s) from reception buffer
+    // 2 - Process self boards ID assignment request from reception buffer
+    // 3 - Process assign from client board(s)
+    // 4 - Process self events from the HardwareModule
 }
 
 void NetworkModule::transferToMaster(Scheduler &scheduler)
@@ -425,9 +430,9 @@ void NetworkModule::transferToMaster(Scheduler &scheduler)
 
 }
 
-bool NetworkModule::readDataFromClient(Client *client, std::size_t &bufferIndex)
+bool NetworkModule::readDataFromClient(Client *client, std::size_t &receptionIndex)
 {
-    auto bufferPtr = _networkBuffer.data() + bufferIndex;
+    auto bufferPtr = _networkBuffer.data() + receptionIndex;
 
     const auto ret = ::recv(client->socket, bufferPtr, 1024, MSG_DONTWAIT);
 
@@ -446,7 +451,7 @@ bool NetworkModule::readDataFromClient(Client *client, std::size_t &bufferIndex)
     }
 
     std::cout << "[Board]\tReceived " << ret << " bytes from client" << std::endl;
-    bufferIndex += ret; // Increment specific index for next read operation
+    receptionIndex += ret; // Increment specific index for next read operation
 
     return true;
 }
