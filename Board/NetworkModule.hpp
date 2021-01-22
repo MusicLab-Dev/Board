@@ -39,13 +39,14 @@ public:
     static constexpr std::size_t InputsOffset = TransferBufferSize + AssignAreaSize;
 
     /*
+        Network buffer representation:
 
         |     TRANSFER [8192]    |            RECEPTION [4096]             |
         |                        |                                         |
         |                        |     Assign [256]        Inputs [3840]   |
         |________________________|____________________|____________________|
 
-                                    TOTAL [12288]
+                                   TOTAL [12288]
     */
 
     /** @brief Network buffer used for all packet emission and reception */
