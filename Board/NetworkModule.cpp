@@ -139,12 +139,9 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
         return;
 
     proccessNewClientConnections(scheduler);
-
-    readClients(scheduler);
-    processClientsData(scheduler);
-    transferToMaster(scheduler);
-
-    // Send hardware module data
+    readClients(scheduler); // 1
+    processClientsData(scheduler); // 2
+    transferToMaster(scheduler); // 3
 }
 
 void NetworkModule::discover(Scheduler &scheduler) noexcept
@@ -418,10 +415,14 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
 {
     std::cout << "[Board]\tNetworkModule::processClientsData" << std::endl;
 
-    // 1 - Process inputs from client board(s) from reception buffer
-    // 2 - Process self boards ID assignment request from reception buffer
-    // 3 - Process assign from client board(s)
-    // 4 - Process self events from the HardwareModule
+    /* Processing all data in 4 steps : */
+    /* PRIORITY ORDER: slaves assigns, self assigns, slave events, self events */
+    /* Note: All "Assigns" packets have to be process one by one to add footprint when "events" can be transfered directly */
+
+    // 1 - Extract the "slaves assigns" from the "slaves data" area in the reception buffer & add footprint & store in transfer buffer.
+    // 2 - Extract "self assigns" from "self assigns" area in the reception buffer & add footprint & store in transfer buffer.
+    // 3 - Copy all the "slaves events" from the "slaves data" area (all remaining data) into the transfer buffer.
+    // 4 - Copy all "self events" from the HardwareModule into the transfer buffer
 }
 
 void NetworkModule::transferToMaster(Scheduler &scheduler)

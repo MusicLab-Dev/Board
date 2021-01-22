@@ -41,10 +41,10 @@ public:
     /*
         Network buffer representation:
 
-        |     TRANSFER [8192]    |            RECEPTION [4096]             |
-        |                        |                                         |
-        |                        |     Assign [256]        Inputs [3840]   |
-        |________________________|____________________|____________________|
+        |     TRANSFER [8192]    |              RECEPTION [4096]               |
+        |                        |                                             |
+        |                        |  Self assigns [256]     Slaves data [3840]  |
+        |________________________|______________________|______________________|
 
                                    TOTAL [12288]
     */
