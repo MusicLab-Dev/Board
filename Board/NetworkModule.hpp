@@ -27,16 +27,38 @@
 class alignas_cacheline NetworkModule : public Module
 {
 public:
-    /** @brief Size of the network buffers */
+    /** @brief Size of the network buffers & areas */
     static constexpr std::size_t TransferBufferSize = 8192;
     static constexpr std::size_t ReceptionBufferSize = 4096;
     static constexpr std::size_t NetworkBufferSize = TransferBufferSize + ReceptionBufferSize;
-
     static constexpr std::size_t AssignAreaSize = 256;
     static constexpr std::size_t InputsAreaSize = 3840;
 
+    /** @brief Reception buffer offsets */
     static constexpr std::size_t AssignOffset = TransferBufferSize;
     static constexpr std::size_t InputsOffset = TransferBufferSize + AssignAreaSize;
+
+    using Vector = Core::Vector<std::uint8_t, std::uint16_t>;
+
+    /** @brief Network buffer used for all packet emission and reception */
+    class NetworkBuffer : public Vector
+    {
+
+        public:
+
+            NetworkBuffer(std::size_t networkBufferSize) : Vector(networkBufferSize) {  }
+
+            void setTransferSize(std::size_t size) noexcept { this->setSize(size); }
+
+            void reset(void) noexcept
+            {
+                std::memset(data(), 0, capacity());
+                setSize(0);
+            }
+
+        private:
+
+    };
 
     /*
         Network buffer representation:
@@ -48,9 +70,6 @@ public:
 
                                    TOTAL [12288]
     */
-
-    /** @brief Network buffer used for all packet emission and reception */
-    using NetworkBuffer = Core::Vector<std::uint8_t, std::uint16_t>;
 
     struct Endpoint
     {
@@ -103,10 +122,12 @@ private:
 
     Core::Vector<Client, std::uint16_t> _clients;
 
+    /** @brief Network buffer used for all packet emission and reception */
     NetworkBuffer _networkBuffer;
 
-    // std::uint16_t read_index { 0 };
-    // std::uint16_t write_index { 0 };
+    /* Direct client board(s) temporary index assignment */
+    std::uint8_t _selfAssignIndex = 0;
+
 
     /** @brief Read data from connected boards that are in client mode (STEP 1) */
     void readClients(Scheduler &scheduler);
@@ -119,13 +140,20 @@ private:
 
 
     /** @brief Read data from a specific connection and place it into the reception buffer at receptionIndex */
-    bool readDataFromClient(Client *client, std::size_t &receptionIndex);
+    bool readDataFromClient(Client *client, std::size_t &offset);
 
     /** @brief Accept and proccess new board connections */
     void proccessNewClientConnections(Scheduler &scheduler);
 
+    /** @brief Process & client packet in assigment mode */
+    void processClientAssignmentRequest(Client *client, std::size_t &offset);
+
+
     /** @brief Process master connection */
     void processMaster(Scheduler &scheduler);
+
+    /** @brief Process ID assignment packet from the master endpoint */
+    void processAssignmentFromMaster(Protocol::ReadablePacket &&assignmentPacket);
 
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
@@ -148,27 +176,6 @@ private:
 
     /** @brief Notify boards that connection with the studio has been lost & close all clients */
     void notifyDisconnectionToClients(void);
-
-    /** @brief Send a packet (ensure that everything is transmitted) */
-    // [[nodiscard]] bool sendPacket(const Net::Socket socket, Protocol::WritablePacket &packet) noexcept
-    // {
-    //     const auto total = packet.totalSize();
-    //     auto current = packet.totalSize();
-
-    //     do {
-    //         const auto size = ::send(
-    //             socket,
-    //             _buffer.data() + (total - current),
-    //             current,
-    //             0
-    //         );
-    //         if (size > 0) {
-    //             current -= size;
-    //         } else
-    //             return false;
-    //     } while (current);
-    //     return true;
-    // }
 };
 
 static_assert_fit_cacheline(NetworkModule);

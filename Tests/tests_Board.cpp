@@ -5,6 +5,7 @@
 
 #include <thread>
 #include <atomic>
+#include <chrono>
 
 #include <gtest/gtest.h>
 
@@ -166,6 +167,79 @@ bool sendBoardIDAssignment(const Net::Socket boardSocket)
     return true;
 }
 
+void slaveBoardEntry(void)
+{
+    std::cout << "[Slave]\tSlave board thread launched" << std::endl;
+
+    using namespace Protocol;
+
+    sockaddr_in masterBoardAddress {
+        .sin_family = AF_INET,
+        .sin_port = ::htons(420),
+        .sin_addr = {
+            .s_addr = ::inet_addr("0.0.0.0"),
+        },
+        .sin_zero = { 0u }
+    };
+    Net::Socket masterBoardSocket = ::socket(AF_INET, SOCK_STREAM, 0);
+    auto ret = ::connect(
+        masterBoardSocket,
+        reinterpret_cast<const sockaddr *>(&masterBoardAddress),
+        sizeof(masterBoardAddress)
+    );
+    if (ret < 0) {
+        std::cout << "[Slave]\tslaveBoardEntry::connect failed: " << strerror(errno) << std::endl;
+        return;
+    }
+
+    // Self ID request test
+
+    char requestBuffer[sizeof(WritablePacket::Header) + sizeof(BoardID)];
+    std::memset(&requestBuffer, 0, sizeof(requestBuffer));
+    WritablePacket requestPacket(std::begin(requestBuffer), std::end(requestBuffer));
+    requestPacket.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
+    requestPacket << BoardID(0u);
+
+    if (!send(masterBoardSocket, &requestBuffer, requestPacket.totalSize(), 0)) {
+        std::cout << "[Slave]\tslaveBoardEntry::send failed: " << std::strerror(errno) << std::endl;
+        return;
+    }
+
+    // Waiting for an ID assignment response
+
+    std::cout << "[Slave]\tWaiting for an ID assignment response..." << std::endl;
+
+    char responseBuffer[256];
+    std::memset(&responseBuffer, 0, sizeof(responseBuffer));
+    ret = ::read(masterBoardSocket, &responseBuffer, sizeof(responseBuffer));
+    if (ret < 0) {
+        std::cout << "[Slave]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
+        return;
+    }
+
+    std::cout << "[Slave]\tID assignment response received !" << std::endl;
+
+    close(masterBoardSocket);
+
+    // while (1) { }
+
+    // Slave ID request forwarding test
+
+    // char fakeTransferBuffer[sizeof(WritablePacket::Header) + 2 * sizeof(BoardID)];
+
+    // WritablePacket slaveRequest(std::begin(fakeTransferBuffer), std::end(fakeTransferBuffer));
+    // slaveRequest.prepare(ProtocolType::Connection, ConnectionCommand::IDAssignment);
+    // slaveRequest.pushFootprint(2);
+    // slaveRequest.pushFootprint(42);
+
+    // if (!send(masterBoardSocket, &fakeTransferBuffer, slaveRequest.totalSize(), 0)) {
+    //     std::cout << "[Slave]\tslaveBoardEntry::send failed: " << std::strerror(errno) << std::endl;
+    //     return;
+    // }
+
+    std::cout << "[Slave]\tExit slave board thread" << std::endl;
+}
+
 TEST(Board, Connection)
 {
     bool started = false;
@@ -189,21 +263,49 @@ TEST(Board, Connection)
     ASSERT_TRUE(waitForBoardIDRequest(boardSocket));
     ASSERT_TRUE(sendBoardIDAssignment(boardSocket));
 
+    std::thread slaveBoard(slaveBoardEntry);
+
+    using namespace Protocol;
+
+    char buffer[256];
+    std::memset(&buffer, 0, sizeof(buffer));
+
+    const auto ret = ::recv(boardSocket, &buffer, 1024, 0);
+    std::cout << "[Test]\tReceived " << ret << " bytes from board" << std::endl;
+
+    ReadablePacket requestPacket(&buffer, &buffer + ret);
+
+    char responseBuffer[256];
+    std::memset(&responseBuffer, 0, sizeof(responseBuffer));
+
+    WritablePacket responsePacket(&responseBuffer, &responseBuffer + requestPacket.totalSize());
+    responsePacket = requestPacket;
+
+    responsePacket.popFrontStack();
+
+    *(responsePacket.data()) = BoardID(92);
+
+    send(boardSocket, &responseBuffer, responsePacket.totalSize(), 0);
+
+    std::chrono::seconds delay(5);
+    std::this_thread::sleep_for(delay);
+
     close(boardSocket);
     close(masterSocket);
     close(broadcastSocket);
 
-    // Stop and join BoardApp
-    std::cout << "[Test]\tStopping board thread" << std::endl;
+    // Stop and join slave board thread
+    std::cout << "[Test]\tStopping slave board thread" << std::endl;
+    if (slaveBoard.joinable()) {
+        slaveBoard.join();
+        std::cout << "[Test]\tSlave board thread has exit" << std::endl;
+    }
+
+    // Stop and join master board thread
+    std::cout << "[Test]\tStopping master board thread" << std::endl;
     scheduler.stop();
     if (thd.joinable()) {
-        std::cout << "[Test]\tWaiting board thread..." << std::endl;
         thd.join();
-        std::cout << "[Test]\tBoard thread has exit" << std::endl;
+        std::cout << "[Test]\tMaster board thread has exit" << std::endl;
     }
-}
-
-TEST(Board, Disconnection)
-{
-
 }
