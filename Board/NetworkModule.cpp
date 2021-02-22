@@ -619,7 +619,7 @@ void NetworkModule::processClientAssignmentRequest(Client *client, std::size_t &
 
     WritablePacket requestPacket(requestPacketPtr, requestPacketPtr + sizeof(WritablePacket::Header) + packetPayload + 2 * sizeof(BoardID));
 
-    // Adding self board id to the stack
+    // Adding self board ID to the stack
     requestPacket.pushFootprint(_boardID);
 
     // Add temporary board ID to the packet
