@@ -56,7 +56,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
         throw std::runtime_error(std::strerror(errno));
 
     // Initialize network buffer
-    std::memset(_networkBuffer.data(), 0u, NetworkBufferSize);
+    _networkBuffer.reset();
 }
 
 NetworkModule::~NetworkModule(void)
@@ -411,7 +411,7 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
         sizeof(udpBroadcastAddress)
     );
     if (ret < 0) {
-        std::cout << "[Board]\t NetworkModule::discoveryEmit::sendto failed: " << std::strerror(errno) << std::endl;
+        std::cout << "[Board]\tNetworkModule::discoveryEmit::sendto failed: " << std::strerror(errno) << std::endl;
     }
 }
 
