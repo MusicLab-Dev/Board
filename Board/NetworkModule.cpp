@@ -152,7 +152,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
     std::memset(&buffer, 0, sizeof(buffer));
     // Proccess master input, read must be non-blocking
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
-    if (ret == 0) {
+    if (ret == 0 || (ret < 0 && errno == ETIMEDOUT)) {
         std::cout << "[Board]\tDisconnected from master" << std::endl;
         close(_masterSocket);
         _masterSocket = -1;
@@ -161,6 +161,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
         _nodeDistance = 0u;
         scheduler.setState(Scheduler::State::Disconnected);
         notifyDisconnectionToClients();
+	return;
     }
     else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
         std::cout << "[Board]\tNo data from received from master" << std::endl;
@@ -274,6 +275,19 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     fcntl(_masterSocket, F_SETFL, O_NONBLOCK);
 }
 
+void NetworkModule::setSocketKeepAlive(const int socket) const noexcept
+{
+    int enable = 1;
+    int idle = 3;
+    int interval = 3;
+    int maxpkt = 1;
+
+    setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(int));
+}
+
 void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept
 {
     std::cout << "[Board]\tNetworkModule::initNewMasterConnection" << std::endl;
@@ -303,7 +317,7 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
         std::cout << "[Board]\tinitNewMasterConnection::connect failed: " << strerror(errno) << std::endl;
         return;
     }
-
+    setSocketKeepAlive(_masterSocket);
     std::cout << "[Board]\tConnected to studio master socket" << std::endl;
     startIDRequestToMaster(masterEndpoint, scheduler);
     return;

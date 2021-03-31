@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -167,6 +168,9 @@ private:
 
     /** @brief Analyse every available UDP endpoints */
     void analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoints, Scheduler &scheduler) noexcept;
+
+    /** @brief Set keepalive option on socket */
+    void setSocketKeepAlive(const int socket) const noexcept;
 
     /** @brief Init a new connection to a new master (server) endpoint */
     void initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept;
