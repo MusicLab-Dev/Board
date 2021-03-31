@@ -162,10 +162,11 @@ void NetworkModule::processMaster(Scheduler &scheduler)
         scheduler.setState(Scheduler::State::Disconnected);
         notifyDisconnectionToClients();
     }
-    else if (ret < 0) {
-        std::cout << "[Board]\tError reading data from master" << std::endl;
+    else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        std::cout << "[Board]\tNo data from received from master" << std::endl;
         return;
     }
+
     std::cout << "[Board]\tReceived " << ret << " bytes from master" << std::endl;
 
     char *bufferPtr = &buffer[0];

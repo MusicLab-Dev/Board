@@ -178,4 +178,4 @@ private:
     void notifyDisconnectionToClients(void);
 };
 
-static_assert_fit_cacheline(NetworkModule);
+// static_assert_fit_cacheline(NetworkModule);
