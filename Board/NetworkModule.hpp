@@ -5,8 +5,10 @@
 
 #pragma once
 
+// C++ standard library
 #include <cstring>
 
+// Network headers
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -15,12 +17,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+// Lexo headers
 #include <Core/Vector.hpp>
-
 #include <Protocol/Packet.hpp>
 #include <Protocol/Protocol.hpp>
 #include <Protocol/ConnectionProtocol.hpp>
-
 #include "Types.hpp"
 #include "Module.hpp"
 

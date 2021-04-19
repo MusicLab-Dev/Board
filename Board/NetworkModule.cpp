@@ -48,7 +48,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
         sizeof(localAddress)
     );
     if (ret < 0) {
-        close(_slavesSocket);
+        ::close(_slavesSocket);
         throw std::runtime_error(std::strerror(errno));
     }
     ret = ::listen(_slavesSocket, 5);
@@ -63,10 +63,10 @@ NetworkModule::~NetworkModule(void)
 {
     std::cout << "[Board]\tNetworkModule destructor" << std::endl;
 
-    close(_udpBroadcastSocket);
+    ::close(_udpBroadcastSocket);
     if (_masterSocket != -1) {
-        shutdown(_masterSocket, SHUT_RDWR);
-        close(_masterSocket);
+        ::shutdown(_masterSocket, SHUT_RDWR);
+        ::close(_masterSocket);
     }
 }
 
@@ -105,7 +105,7 @@ void NetworkModule::notifyDisconnectionToClients(void)
         return;
     }
     for (const auto client : _clients) {
-        close(client.socket);
+        ::close(client.socket);
     }
     _clients.clear();
 }
@@ -154,7 +154,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
     if (ret == 0 || (ret < 0 && errno == ETIMEDOUT)) {
         std::cout << "[Board]\tDisconnected from master" << std::endl;
-        close(_masterSocket);
+        ::close(_masterSocket);
         _masterSocket = -1;
         _boardID = 0u;
         _connectionType = Protocol::ConnectionType::None;
