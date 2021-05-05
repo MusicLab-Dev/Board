@@ -7,6 +7,7 @@
 
 #include <string>
 #include <istream>
+#include <string_view>
 
 #include <Core/Hash.hpp>
 #include <Core/Vector.hpp>
@@ -23,8 +24,7 @@ public:
     ~ConfigTable(void) noexcept = default;
 
     /** @brief Get a value from the table using its key */
-    template<typename Key>
-    [[nodiscard]] const std::string &get(const Key &key, const std::string &defaultValue = std::string()) const noexcept
+    [[nodiscard]] const std::string &get(const std::string_view &key, const std::string &defaultValue = std::string()) const noexcept
         { return get(Core::Hash(key), defaultValue); }
 
 

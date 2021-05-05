@@ -46,10 +46,10 @@ public:
 
 
     /** @brief Get the connection state */
-    [[nodiscard]] const State state(void) noexcept { return _state; }
+    [[nodiscard]] State state(void) noexcept { return _cache.state; }
 
     /** @brief Change the connection state of the scheduler */
-    void setState(const State state) noexcept { _state = state; }
+    void setState(const State state) noexcept { _cache.state = state; }
 
 
     /** @brief Get the internal hardware module */
@@ -59,12 +59,13 @@ public:
     [[nodiscard]] NetworkModule &networkModule(void) noexcept { return _networkModule; }
 
 private:
-    struct alignas_cacheline
+    struct alignas_cacheline Cache
     {
-        State _state { State::Disconnected };
-        Chrono::Duration _tickRate { 1000000000 };
+        State state { State::Disconnected };
+        Chrono::Duration tickRate { 1000000000 };
     };
 
+    Cache _cache;
     HardwareModule _hardwareModule;
     NetworkModule _networkModule;
 };

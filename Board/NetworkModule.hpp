@@ -48,9 +48,9 @@ public:
 
         public:
 
-            NetworkBuffer(std::size_t networkBufferSize) : Vector(networkBufferSize) {  }
+            NetworkBuffer(short unsigned int networkBufferSize) : Vector(static_cast<short unsigned int>(networkBufferSize)) {  }
 
-            void setTransferSize(std::size_t size) noexcept { this->setSize(size); }
+            void setTransferSize(short unsigned int size) noexcept { this->setSize(size); }
 
             void reset(void) noexcept
             {

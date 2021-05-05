@@ -34,13 +34,12 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     _slavesSocket = socket(AF_INET, SOCK_STREAM | O_NONBLOCK, 0);
     if (_slavesSocket < 0)
         throw std::runtime_error(std::strerror(errno));
-    sockaddr_in localAddress = {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(420),
-        .sin_addr = {
-            .s_addr = ::htonl(INADDR_ANY)
-        }
-    };
+
+    sockaddr_in localAddress;
+    localAddress.sin_family = AF_INET;
+    localAddress.sin_port = ::htons(420);
+    localAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
+
     // bind localAddress to _slavesSocket
     ret = ::bind(
         _slavesSocket,
@@ -74,13 +73,11 @@ bool NetworkModule::tryToBindUdp(void)
 {
     // Define UDP broadcast address
     const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
-    sockaddr_in udpBroadcastAddress {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(420),
-        .sin_addr = {
-            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str())
-        }
-    };
+
+    sockaddr_in udpBroadcastAddress;
+    udpBroadcastAddress.sin_family = AF_INET;
+    udpBroadcastAddress.sin_port = ::htons(420);
+    udpBroadcastAddress.sin_addr.s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str());
 
     const auto ret = ::bind(
         _udpBroadcastSocket,
@@ -126,7 +123,7 @@ void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &&assig
         BoardID temporaryAssignedID = forwardPacket.popFrontStack();
         BoardID clientNewID = assignmentPacket.extract<BoardID>();
 
-        std::cout << "[Board]\tID assignment packet is for direct client with temporary ID = " << (int)temporaryAssignedID << std::endl;
+        std::cout << "[Board]\tID assignment packet is for direct client with temporary ID = " << static_cast<int>(temporaryAssignedID) << std::endl;
 
         for (auto &clientBoard : _clients) {
             if (clientBoard.id != temporaryAssignedID)
@@ -136,7 +133,7 @@ void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &&assig
                 return;
             }
             clientBoard.id = clientNewID;
-            std::cout << "[Board]\tDirect client get final ID of " << (int)clientBoard.id << " assigned by studio" << std::endl;
+            std::cout << "[Board]\tDirect client get final ID of " << static_cast<int>(clientBoard.id) << " assigned by studio" << std::endl;
             return;
         }
     }
@@ -301,13 +298,12 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
         std::cout << "[Board]\tinitNewMasterConnection::socket failed: " << strerror(errno) << std::endl;
         return;
     }
-    sockaddr_in masterAddress = {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(421),
-        .sin_addr = {
-            .s_addr = masterEndpoint.address
-        }
-    };
+
+    sockaddr_in masterAddress;
+    masterAddress.sin_family = AF_INET;
+    masterAddress.sin_port = ::htons(421);
+    masterAddress.sin_addr.s_addr = masterEndpoint.address;
+
     auto ret = ::connect(
         _masterSocket,
         reinterpret_cast<const sockaddr *>(&masterAddress),
@@ -389,34 +385,33 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
         ::inet_ntop(AF_INET, &(udpSenderAddress.sin_addr), senderAddressString, 100);
         std::cout << "[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from " << senderAddressString << std::endl;
 
-        Endpoint endpoint {
-            .address = udpSenderAddress.sin_addr.s_addr,
-            .connectionType = packet.connectionType,
-            .distance = packet.distance
-        };
+        Endpoint endpoint;
+        endpoint.address = udpSenderAddress.sin_addr.s_addr;
+        endpoint.connectionType = packet.connectionType;
+        endpoint.distance = packet.distance;
+
         udpEndpoints.push_back(endpoint);
     }
 }
 
 void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 {
+    (void)scheduler; // cast to remove error
     std::cout << "[Board]\tNetworkModule::discoveryEmit" << std::endl;
 
-    Protocol::DiscoveryPacket packet = {
-        .magicKey = Protocol::SpecialLabMagicKey,
-        .boardID = _boardID,
-        .connectionType = _connectionType,
-        .distance = _nodeDistance
-    };
+    Protocol::DiscoveryPacket packet;
+    packet.magicKey = Protocol::SpecialLabMagicKey;
+    packet.boardID = _boardID;
+    packet.connectionType = _connectionType;
+    packet.distance = _nodeDistance;
 
     const std::string &broadcastAddress = confTable.get("BroadcastAddress", "NotFound").c_str();
-    sockaddr_in udpBroadcastAddress {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(420),
-        .sin_addr = {
-            .s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str())
-        }
-    };
+
+    sockaddr_in udpBroadcastAddress;
+    udpBroadcastAddress.sin_family = AF_INET;
+    udpBroadcastAddress.sin_port = ::htons(420);
+    udpBroadcastAddress.sin_addr.s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str());
+
     const auto ret = ::sendto(
         _udpBroadcastSocket,
         &packet,
@@ -432,9 +427,11 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 
 void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 {
+    (void)scheduler; // cast to remove error
     std::cout << "[Board]\tNetworkModule::proccessNewClientConnections" << std::endl;
 
-    sockaddr_in clientAddress { 0 };
+    sockaddr_in clientAddress;
+    std::memset(&clientAddress, 0, sizeof(clientAddress));
     socklen_t boardAddressLen = sizeof(clientAddress);
 
     while (1) {
@@ -454,18 +451,20 @@ void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
         std::cout << "[Board]\tNew board connection from " << inet_ntoa(clientAddress.sin_addr) << ":" << ntohs(clientAddress.sin_port) << std::endl;
 
         // Filling new client struct
-        Client clientBoard = {
-            .socket = clientSocket,
-            .address = clientAddress.sin_addr.s_addr,
-            .port = clientAddress.sin_port,
-            .id = 0u
-        };
+        Client clientBoard;
+
+        clientBoard.socket = clientSocket;
+        clientBoard.address = clientAddress.sin_addr.s_addr;
+        clientBoard.port = clientAddress.sin_port;
+        clientBoard.id = 0u;
+
         _clients.push(clientBoard);
     }
 }
 
 void NetworkModule::readClients(Scheduler &scheduler)
 {
+    (void)scheduler; // cast to remove error
     std::cout << "[Board]\tNetworkModule::readClients" << std::endl;
 
     // Return if there is no client board(s)
@@ -496,6 +495,7 @@ void NetworkModule::readClients(Scheduler &scheduler)
 
 void NetworkModule::processClientsData(Scheduler &scheduler)
 {
+    (void)scheduler;
     std::cout << "[Board]\tNetworkModule::processClientsData" << std::endl;
 
     /* Processing all data in 4 steps : */
@@ -569,11 +569,12 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
         selfAssignPtr += sizeof(WritablePacket::Header) + packetPayload;
     }
 
-    _networkBuffer.setTransferSize(transferBufferSize);
+    _networkBuffer.setTransferSize(static_cast<short unsigned int>(transferBufferSize));
 }
 
 void NetworkModule::transferToMaster(Scheduler &scheduler)
 {
+    (void)scheduler; // cast to remove error
     std::cout << "[Board]\tNetworkModule::transferToMaster" << std::endl;
 
     // Transfer all data of the current tick to master endpoint

@@ -42,23 +42,18 @@ bool initBroadcastSocket(Net::Socket &broadcastSocket)
 
 bool emitBroadcastPacket(Net::Socket &broadcastSocket)
 {
-    sockaddr_in usbBroadcastAddress {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(420),
-        .sin_addr = {
-            .s_addr = ::inet_addr("127.0.0.1"),
-        },
-        .sin_zero = { 0u }
-    };
+    sockaddr_in usbBroadcastAddress;
+    std::memset(&usbBroadcastAddress, 0, sizeof(usbBroadcastAddress));
+    usbBroadcastAddress.sin_family = AF_INET;
+    usbBroadcastAddress.sin_port = ::htons(420);
+    usbBroadcastAddress.sin_addr.s_addr = ::inet_addr("127.0.0.1");
 
     Protocol::DiscoveryPacket packet;
     std::memset(&packet, 0, sizeof(packet));
-    packet = {
-        .magicKey = Protocol::SpecialLabMagicKey,
-        .boardID = static_cast<Protocol::BoardID>(420),
-        .connectionType = Protocol::ConnectionType::USB,
-        .distance = 0,
-    };
+    packet.magicKey = Protocol::SpecialLabMagicKey;
+    packet.boardID = static_cast<Protocol::BoardID>(420);
+    packet.connectionType = Protocol::ConnectionType::USB;
+    packet.distance = 0;
 
     auto ret = ::sendto(
         broadcastSocket,
@@ -89,13 +84,12 @@ bool initMasterSocket(Net::Socket &masterSocket)
         printError("initMasterSocket::setsockopt");
         return false;
     }
-    sockaddr_in studioAddress = {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(421),
-        .sin_addr = {
-            .s_addr = ::htonl(INADDR_ANY)
-        }
-    };
+    sockaddr_in studioAddress;
+    std::memset(&studioAddress, 0, sizeof(studioAddress));
+    studioAddress.sin_family = AF_INET;
+    studioAddress.sin_port = ::htons(421);
+    studioAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
+
     // bind master socket to local address
     auto ret = ::bind(
         masterSocket,
@@ -117,7 +111,8 @@ bool initMasterSocket(Net::Socket &masterSocket)
 
 bool waitForBoardConnection(const Net::Socket masterSocket, Net::Socket &boardSocket)
 {
-    sockaddr_in boardAddress { 0 };
+    sockaddr_in boardAddress;
+    std::memset(&boardAddress, 0, sizeof(boardAddress));
     socklen_t boardAddressLen = sizeof(boardAddress);
 
     boardSocket = ::accept(
@@ -173,14 +168,12 @@ void slaveBoardEntry(void)
 
     using namespace Protocol;
 
-    sockaddr_in masterBoardAddress {
-        .sin_family = AF_INET,
-        .sin_port = ::htons(420),
-        .sin_addr = {
-            .s_addr = ::inet_addr("0.0.0.0"),
-        },
-        .sin_zero = { 0u }
-    };
+    sockaddr_in masterBoardAddress;
+    std::memset(&masterBoardAddress, 0, sizeof(masterBoardAddress));
+    masterBoardAddress.sin_family = AF_INET;
+    masterBoardAddress.sin_port = ::htons(420);
+    masterBoardAddress.sin_addr.s_addr = ::inet_addr("0.0.0.0");
+
     Net::Socket masterBoardSocket = ::socket(AF_INET, SOCK_STREAM, 0);
     auto ret = ::connect(
         masterBoardSocket,
@@ -211,8 +204,8 @@ void slaveBoardEntry(void)
 
     char responseBuffer[256];
     std::memset(&responseBuffer, 0, sizeof(responseBuffer));
-    ret = ::read(masterBoardSocket, &responseBuffer, sizeof(responseBuffer));
-    if (ret < 0) {
+    const auto dataSize = ::read(masterBoardSocket, &responseBuffer, sizeof(responseBuffer));
+    if (dataSize < 0) {
         std::cout << "[Slave]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
         return;
     }

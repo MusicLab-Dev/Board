@@ -16,6 +16,7 @@ static bool Running = false;
  **/
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
 {
+    (void)arguments; // cast to remove error
     std::cout << "[Board]\tScheduler consctructor" << std::endl;
 }
 
@@ -55,7 +56,7 @@ void Scheduler::run(void)
 
         // Process tick of each module if needed
         const auto elapsedTime = static_cast<std::size_t>(duration_cast<nanoseconds>(currentTime - previousTick).count());
-        if (elapsedTime > _tickRate) {
+        if (elapsedTime > _cache.tickRate) {
             _hardwareModule.tick(*this);
             _networkModule.tick(*this);
             previousTick = currentTime;
