@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
-project(Board)
 
 get_filename_component(BoardRoot ${CMAKE_CURRENT_LIST_FILE} PATH)
+
+include(${BoardRoot}/CompileOptions/ToolchainOptions.cmake)
+
+# Target 32bits architecture
+add_compile_options("-m32")
+link_libraries("-m32")
+
+project(Board)
 
 include(${BoardRoot}/CompileOptions/CompileOptions.cmake)
 
