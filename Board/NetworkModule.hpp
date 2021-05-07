@@ -119,6 +119,7 @@ private:
     bool _isBinded { false };
 
     Net::Socket _udpBroadcastSocket { -1 }; // Socket used to send and receive msg over UDP
+    Net::Socket _udpLocalSocket { -1 };
     Net::Socket _masterSocket { -1 }; // Socket used to exchange with master (act as client)
     Net::Socket _slavesSocket { -1 }; // Socket used to exchange with multiple slaves (act as server)
 

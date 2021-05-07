@@ -54,6 +54,28 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     if (ret < 0)
         throw std::runtime_error(std::strerror(errno));
 
+    // Open UDP local socket
+    _udpLocalSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (_udpLocalSocket < 0)
+        throw std::runtime_error(std::strerror(errno));
+
+    sockaddr_in udpLocalAddress;
+    udpLocalAddress.sin_family = AF_INET;
+    udpLocalAddress.sin_port = ::htons(420);
+    udpLocalAddress.sin_addr.s_addr = INADDR_ANY;
+
+    // Bind UDP local socket to address
+    ret = ::bind(
+        _udpLocalSocket,
+        reinterpret_cast<const sockaddr *>(&udpLocalAddress),
+        sizeof(udpLocalAddress)
+    );
+    if (ret < 0 && (errno == 13 || errno == 98))
+        throw std::runtime_error(std::strerror(errno));
+    if (ret < 0) {
+        std::cout << "[Board]\tBIND ERROR" << std::endl;
+    }
+
     // Initialize network buffer
     _networkBuffer.reset();
 }
@@ -355,7 +377,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
 
     while (1) {
         const auto size = ::recvfrom(
-            _udpBroadcastSocket,
+            _udpLocalSocket,
             &packet,
             sizeof(Protocol::DiscoveryPacket),
             MSG_WAITALL | MSG_DONTWAIT,
