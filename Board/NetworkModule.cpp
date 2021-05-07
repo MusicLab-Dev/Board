@@ -18,6 +18,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     _udpBroadcastSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (_udpBroadcastSocket < 0)
         throw std::runtime_error(std::strerror(errno));
+    setSocketReusable(_udpBroadcastSocket);
     auto ret = ::setsockopt(
         _udpBroadcastSocket,
         SOL_SOCKET,
@@ -34,6 +35,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     _slavesSocket = socket(AF_INET, SOCK_STREAM | O_NONBLOCK, 0);
     if (_slavesSocket < 0)
         throw std::runtime_error(std::strerror(errno));
+    setSocketReusable(_slavesSocket);
 
     sockaddr_in localAddress;
     localAddress.sin_family = AF_INET;
@@ -58,6 +60,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     _udpLocalSocket = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (_udpLocalSocket < 0)
         throw std::runtime_error(std::strerror(errno));
+    setSocketReusable(_udpLocalSocket);
 
     sockaddr_in udpLocalAddress;
     udpLocalAddress.sin_family = AF_INET;

@@ -182,6 +182,21 @@ private:
 
     /** @brief Notify boards that connection with the studio has been lost & close all clients */
     void notifyDisconnectionToClients(void);
+
+    void setSocketReusable(const Net::Socket socket)
+    {
+        const int enable = 1;
+        auto ret = ::setsockopt(
+            socket,
+            SOL_SOCKET,
+            SO_REUSEADDR,
+            &enable,
+            sizeof(enable)
+        );
+        if (ret < 0)
+            throw std::runtime_error(std::strerror(errno));
+    }
+
 };
 
 // static_assert_fit_cacheline(NetworkModule);
