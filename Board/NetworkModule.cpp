@@ -223,8 +223,8 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
     }
 
     // Emit broadcast packet only if board is connected
-    if (scheduler.state() == Scheduler::State::Connected)
-        discoveryEmit(scheduler);
+    // if (scheduler.state() == Scheduler::State::Connected)
+    discoveryEmit(scheduler);
     discoveryScan(scheduler);
 }
 
