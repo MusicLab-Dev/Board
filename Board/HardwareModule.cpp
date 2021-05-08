@@ -30,7 +30,7 @@ void HardwareModule::tick(Scheduler &scheduler) noexcept
         return;
     _events.clear();
     for (auto i = 0; i < Pin::Count; ++i) {
-        const auto value = static_cast<std::uint8_t>(GPIO::DigitalRead(Pin::Array[i]));
+        const auto value = static_cast<std::uint8_t>(!GPIO::DigitalRead(Pin::Array[i]));
         auto &ctrl = _controls.at(static_cast<std::size_t>(i));
         if (value == ctrl.value1)
             continue;
