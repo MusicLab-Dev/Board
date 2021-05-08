@@ -36,16 +36,16 @@ void GPIO::SetPinMode(int pin, PinMode mode) noexcept
     int targetMode = 0;
     switch (mode) {
     case PinMode::Input:
-        mode = INPUT;
+        targetMode = INPUT;
         break;
     case PinMode::Output:
-        mode = OUTPUT;
+        targetMode = OUTPUT;
         break;
     case PinMode::PwmOutput:
-        mode = PWM_OUTPUT;
+        targetMode = PWM_OUTPUT;
         break;
     case PinMode::GpioClock:
-        mode = GPIO_CLOCK;
+        targetMode = GPIO_CLOCK;
         break;
     default:
         return;
@@ -63,10 +63,10 @@ void GPIO::SetPullMode(int pin, PullMode mode) noexcept
     int targetMode = 0;
     switch (mode) {
     case PullMode::Up:
-        mode = PUD_UP;
+        targetMode = PUD_UP;
         break;
     case PullMode::Down:
-        mode = PUD_DOWN;
+        targetMode = PUD_DOWN;
         break;
     default:
         return;
