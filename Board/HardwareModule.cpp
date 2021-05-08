@@ -11,8 +11,12 @@
 HardwareModule::HardwareModule(void) noexcept
 {
     _controls.resize(Pin::Count);
-    for (auto &ctrl : _controls)
+    int i = 0;
+    for (auto &ctrl : _controls) {
         ctrl.type = Control::Type::Button;
+        GPIO::SetPinMode(i, GPIO::PinMode::Input);
+        GPIO::SetPullMode(i, GPIO::PullMode::Up);
+    }
 }
 
 HardwareModule::~HardwareModule(void) noexcept
