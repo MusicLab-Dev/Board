@@ -12,6 +12,8 @@
 #include <Board/Scheduler.hpp>
 #include <Protocol/Packet.hpp>
 
+static constexpr Net::Port LexoPort = 4242;
+
 void printError(const std::string &location)
 {
     std::cout << "[Studio]\t" << location << " failed: " << std::strerror(errno) << std::endl;
@@ -45,13 +47,13 @@ bool emitBroadcastPacket(Net::Socket &broadcastSocket)
     sockaddr_in usbBroadcastAddress;
     std::memset(&usbBroadcastAddress, 0, sizeof(usbBroadcastAddress));
     usbBroadcastAddress.sin_family = AF_INET;
-    usbBroadcastAddress.sin_port = ::htons(420);
+    usbBroadcastAddress.sin_port = ::htons(LexoPort);
     usbBroadcastAddress.sin_addr.s_addr = ::inet_addr("127.0.0.1");
 
     Protocol::DiscoveryPacket packet;
     std::memset(&packet, 0, sizeof(packet));
     packet.magicKey = Protocol::SpecialLabMagicKey;
-    packet.boardID = static_cast<Protocol::BoardID>(420);
+    packet.boardID = static_cast<Protocol::BoardID>(LexoPort);
     packet.connectionType = Protocol::ConnectionType::USB;
     packet.distance = 0;
 

@@ -29,6 +29,9 @@
 class alignas_cacheline NetworkModule : public Module
 {
 public:
+
+    static constexpr Net::Port LexoPort = 4242;
+
     /** @brief Size of the network buffers & areas */
     static constexpr std::size_t TransferBufferSize = 8192;
     static constexpr std::size_t ReceptionBufferSize = 4096;

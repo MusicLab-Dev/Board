@@ -39,7 +39,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
 
     sockaddr_in localAddress;
     localAddress.sin_family = AF_INET;
-    localAddress.sin_port = ::htons(420);
+    localAddress.sin_port = ::htons(LexoPort);
     localAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
 
     // bind localAddress to _slavesSocket
@@ -64,7 +64,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
 
     sockaddr_in udpLocalAddress;
     udpLocalAddress.sin_family = AF_INET;
-    udpLocalAddress.sin_port = ::htons(420);
+    udpLocalAddress.sin_port = ::htons(LexoPort);
     udpLocalAddress.sin_addr.s_addr = INADDR_ANY;
 
     // Bind UDP local socket to address
@@ -101,7 +101,7 @@ bool NetworkModule::tryToBindUdp(void)
 
     sockaddr_in udpBroadcastAddress;
     udpBroadcastAddress.sin_family = AF_INET;
-    udpBroadcastAddress.sin_port = ::htons(420);
+    udpBroadcastAddress.sin_port = ::htons(LexoPort);
     udpBroadcastAddress.sin_addr.s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str());
 
     const auto ret = ::bind(
@@ -434,7 +434,7 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 
     sockaddr_in udpBroadcastAddress;
     udpBroadcastAddress.sin_family = AF_INET;
-    udpBroadcastAddress.sin_port = ::htons(420);
+    udpBroadcastAddress.sin_port = ::htons(LexoPort);
     udpBroadcastAddress.sin_addr.s_addr = ::inet_addr(broadcastAddress == "NotFound" ? "127.0.0.1" : broadcastAddress.c_str());
 
     const auto ret = ::sendto(
