@@ -326,7 +326,7 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
 
     sockaddr_in masterAddress;
     masterAddress.sin_family = AF_INET;
-    masterAddress.sin_port = ::htons(421);
+    masterAddress.sin_port = ::htons(LexoPort + 1);
     masterAddress.sin_addr.s_addr = masterEndpoint.address;
 
     auto ret = ::connect(

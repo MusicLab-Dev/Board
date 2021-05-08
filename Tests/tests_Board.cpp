@@ -89,7 +89,7 @@ bool initMasterSocket(Net::Socket &masterSocket)
     sockaddr_in studioAddress;
     std::memset(&studioAddress, 0, sizeof(studioAddress));
     studioAddress.sin_family = AF_INET;
-    studioAddress.sin_port = ::htons(421);
+    studioAddress.sin_port = ::htons(LexoPort + 1);
     studioAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
 
     // bind master socket to local address
