@@ -3,6 +3,7 @@
  * @ Description: Hardware module
  */
 
+#include <Protocol/NetworkLog.hpp>
 #include "Scheduler.hpp"
 #include "GPIO.hpp"
 #include "PinoutConfig.hpp"
@@ -34,6 +35,7 @@ void HardwareModule::tick(Scheduler &scheduler) noexcept
             static_cast<std::uint8_t>(i),
             ctrl.value1
         });
+        std::cout << "Input event " << i << static_cast<int>(ctrl.value1) << std::endl;
     }
 }
 
