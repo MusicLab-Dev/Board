@@ -29,9 +29,13 @@ public:
     /** @brief Discover called at discover rate */
     void discover(Scheduler &scheduler) noexcept;
 
+
+    /** @brief Get the input event stack */
+    [[nodiscard]] const auto &inputEvents(void) const noexcept { return _inputEvents; }
+
 private:
     Core::FlatVector<Protocol::Control> _controls {};
-    Core::FlatVector<Protocol::InputEvent> _events {};
+    Core::FlatVector<Protocol::InputEvent> _inputEvents {};
     // std::uint32_t _multiplexers { 0 };
 };
 
