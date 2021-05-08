@@ -26,7 +26,13 @@ add_library(${PROJECT_NAME} ${BoardSources})
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${BoardDir}/..)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC Protocol)
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "armv6l")
+    set(WiringPiLib "wiringPi")
+else()
+    set(WiringPiLib "")
+endif()
+
+target_link_libraries(${PROJECT_NAME} PUBLIC Protocol ${WiringPiLib})
 
 if(CODE_COVERAGE)
     target_compile_options(${PROJECT_NAME} PUBLIC --coverage)
