@@ -31,7 +31,8 @@ public:
 
 private:
     Core::FlatVector<Protocol::Control> _controls {};
-    std::uint32_t _multiplexers { 0 };
+    Core::FlatVector<Protocol::InputEvent> _events {};
+    // std::uint32_t _multiplexers { 0 };
 };
 
 static_assert_fit_cacheline(HardwareModule);

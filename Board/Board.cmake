@@ -18,6 +18,8 @@ set(BoardSources
     ${BoardDir}/Scheduler.hpp
     ${BoardDir}/Scheduler.ipp
     ${BoardDir}/Types.hpp
+    ${BoardDir}/GPIO.hpp
+    ${BoardDir}/GPIO.cpp
 )
 
 add_library(${PROJECT_NAME} ${BoardSources})

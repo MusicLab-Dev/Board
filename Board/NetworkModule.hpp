@@ -7,6 +7,7 @@
 
 // C++ standard library
 #include <cstring>
+#include <array>
 
 // Network headers
 #include <sys/socket.h>
@@ -43,28 +44,6 @@ public:
     static constexpr std::size_t AssignOffset = TransferBufferSize;
     static constexpr std::size_t InputsOffset = TransferBufferSize + AssignAreaSize;
 
-    using Vector = Core::Vector<std::uint8_t, std::uint16_t>;
-
-    /** @brief Network buffer used for all packet emission and reception */
-    class NetworkBuffer : public Vector
-    {
-
-        public:
-
-            NetworkBuffer(short unsigned int networkBufferSize) : Vector(static_cast<short unsigned int>(networkBufferSize)) {  }
-
-            void setTransferSize(short unsigned int size) noexcept { this->setSize(size); }
-
-            void reset(void) noexcept
-            {
-                std::memset(data(), 0, capacity());
-                setSize(0);
-            }
-
-        private:
-
-    };
-
     /*
         Network buffer representation:
 
@@ -75,6 +54,65 @@ public:
 
                                    TOTAL [12288]
     */
+    class NetworkBuffer
+    {
+    public:
+        /** @brief Add data to the transfer */
+        void writeTransfer(const Protocol::Internal::PacketBase &packet) noexcept;
+
+
+        /** @brief Get transfer range */
+        [[nodiscard]] std::size_t transferSize(void) const noexcept { return _transferHead;  }
+        [[nodiscard]] const std::uint8_t *transferBegin(void) const noexcept { return _data.data(); }
+        [[nodiscard]] const std::uint8_t *transferEnd(void) const noexcept { return _data.data() + _transferHead; }
+        [[nodiscard]] std::uint8_t *transferBegin(void) noexcept { return _data.data(); }
+        [[nodiscard]] std::uint8_t *transferEnd(void) noexcept { return _data.data() + _transferHead; }
+        [[nodiscard]] std::uint8_t *transferRealEnd(void) noexcept { return _data.data() + TransferBufferSize; }
+        [[nodiscard]] const std::uint8_t *transferRealEnd(void) const noexcept { return _data.data() + TransferBufferSize; }
+
+        /** @brief Get assign range */
+        [[nodiscard]] std::size_t assignSize(void) const noexcept { return _assignHead;  }
+        [[nodiscard]] std::uint8_t *assignBegin(void) noexcept { return _data.data() + AssignOffset; }
+        [[nodiscard]] std::uint8_t *assignEnd(void) noexcept { return assignBegin() + _assignHead; }
+        [[nodiscard]] const std::uint8_t *assignBegin(void) const noexcept { return _data.data() + AssignOffset; }
+        [[nodiscard]] const std::uint8_t *assignEnd(void) const noexcept { return assignBegin() + _assignHead; }
+        [[nodiscard]] std::uint8_t *assignRealEnd(void) noexcept { return _data.data() + AssignAreaSize; }
+        [[nodiscard]] const std::uint8_t *assignRealEnd(void) const noexcept { return _data.data() + AssignAreaSize; }
+
+        /** @brief Get slave data range */
+        [[nodiscard]] std::size_t slaveDataSize(void) const noexcept { return _slaveDataHead;  }
+        [[nodiscard]] std::uint8_t *slaveDataBegin(void) noexcept { return _data.data() + InputsOffset; }
+        [[nodiscard]] std::uint8_t *slaveDataEnd(void) noexcept { return slaveDataBegin() + _slaveDataHead; }
+        [[nodiscard]] const std::uint8_t *slaveDataBegin(void) const noexcept { return _data.data() + InputsOffset; }
+        [[nodiscard]] const std::uint8_t *slaveDataEnd(void) const noexcept { return slaveDataBegin() + _slaveDataHead; }
+        [[nodiscard]] std::uint8_t *slaveDataRealEnd(void) noexcept { return _data.data() + InputsAreaSize; }
+        [[nodiscard]] const std::uint8_t *slaveDataRealEnd(void) const noexcept { return _data.data() + InputsAreaSize; }
+
+
+        /** @brief Increment the transfer head */
+        void incrementTransferHead(const std::size_t offset) noexcept { _transferHead += offset; }
+
+        /** @brief Increment the assign head */
+        void incrementAssignHead(const std::size_t offset) noexcept { _assignHead += offset; }
+
+        /** @brief Increment the assign head */
+        void incrementSlaveDataHead(const std::size_t offset) noexcept { _slaveDataHead += offset; }
+
+
+        /** @brief Reset the network buffer */
+        void reset(void) noexcept
+        {
+            _transferHead = 0u;
+            _assignHead = 0u;
+            _slaveDataHead = 0u;
+        }
+
+    private:
+        std::array<std::uint8_t, NetworkBufferSize> _data {};
+        std::size_t _transferHead { 0u };
+        std::size_t _assignHead { 0u };
+        std::size_t _slaveDataHead { 0u };
+    };
 
     struct Endpoint
     {
@@ -112,14 +150,13 @@ public:
     /** @brief Start discovery */
     void discover(Scheduler &scheduler) noexcept;
 
-    /** @brief Tries to add data to the ring buffer */
-    [[nodiscard]] bool write(const std::uint8_t *data, std::size_t size) noexcept;
-
 private:
     Protocol::BoardID _boardID { 0u };
     Protocol::ConnectionType _connectionType { Protocol::ConnectionType::None };
     Protocol::NodeDistance _nodeDistance { 0u };
     bool _isBinded { false };
+
+    static NetworkBuffer _NetworkBuffer;
 
     Net::Socket _udpBroadcastSocket { -1 }; // Socket used to send and receive msg over UDP
     Net::Socket _udpLocalSocket { -1 };
@@ -127,9 +164,6 @@ private:
     Net::Socket _slavesSocket { -1 }; // Socket used to exchange with multiple slaves (act as server)
 
     Core::Vector<Client, std::uint16_t> _clients;
-
-    /** @brief Network buffer used for all packet emission and reception */
-    NetworkBuffer _networkBuffer;
 
     /* Direct client board(s) temporary index assignment */
     std::uint8_t _selfAssignIndex = 0;
@@ -159,7 +193,10 @@ private:
     void processMaster(Scheduler &scheduler);
 
     /** @brief Process ID assignment packet from the master endpoint */
-    void processAssignmentFromMaster(Protocol::ReadablePacket &&assignmentPacket);
+    void processAssignmentFromMaster(Protocol::ReadablePacket &packet);
+
+    /** @brief Process hardware specs packet from the master endpoint */
+    void processHardwareSpecsFromMaster(Protocol::ReadablePacket &packet);
 
 
     /** @brief Try to bind previouly opened UDP broadcast socket */
@@ -203,3 +240,5 @@ private:
 };
 
 // static_assert_fit_cacheline(NetworkModule);
+
+#include "NetworkModule.ipp"

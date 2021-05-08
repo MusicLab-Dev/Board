@@ -7,9 +7,20 @@
 #include <cstring>
 #include <cerrno>
 
-#include "Scheduler.hpp"
+#include <Protocol/NetworkLog.hpp>
 
-NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
+#include "Scheduler.hpp"
+#include "PinoutConfig.hpp"
+
+NetworkModule::NetworkBuffer NetworkModule::_NetworkBuffer;
+
+void NetworkModule::NetworkBuffer::writeTransfer(const Protocol::Internal::PacketBase &packet) noexcept
+{
+    std::copy(packet.rawDataBegin(), packet.rawDataEnd(), transferEnd());
+    incrementTransferHead(packet.totalSize());
+}
+
+NetworkModule::NetworkModule(void)
 {
     std::cout << "[Board]\tNetworkModule constructor" << std::endl;
 
@@ -80,7 +91,7 @@ NetworkModule::NetworkModule(void) : _networkBuffer(NetworkBufferSize)
     }
 
     // Initialize network buffer
-    _networkBuffer.reset();
+    _NetworkBuffer.reset();
 }
 
 NetworkModule::~NetworkModule(void)
@@ -132,28 +143,28 @@ void NetworkModule::notifyDisconnectionToClients(void)
     _clients.clear();
 }
 
-void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &&assignmentPacket)
+void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &packet)
 {
     std::cout << "[Board]\tNetworkModule::processAssignmentFromMaster" << std::endl;
 
     using namespace Protocol;
 
-    if (assignmentPacket.footprintStackSize() == 1) {
+    if (packet.footprintStackSize() == 1) {
 
         char buffer[256];
         std::memset(&buffer, 0, sizeof(buffer));
-        WritablePacket forwardPacket(&buffer, &buffer + sizeof(WritablePacket::Header) + assignmentPacket.payload());
-        forwardPacket = assignmentPacket;
+        WritablePacket forwardPacket(&buffer, &buffer + sizeof(WritablePacket::Header) + packet.payload());
+        forwardPacket = packet;
 
         BoardID temporaryAssignedID = forwardPacket.popFrontStack();
-        BoardID clientNewID = assignmentPacket.extract<BoardID>();
+        BoardID clientNewID = packet.extract<BoardID>();
 
         std::cout << "[Board]\tID assignment packet is for direct client with temporary ID = " << static_cast<int>(temporaryAssignedID) << std::endl;
 
         for (auto &clientBoard : _clients) {
             if (clientBoard.id != temporaryAssignedID)
                 continue;
-            if (!::send(clientBoard.socket, &forwardPacket, forwardPacket.totalSize(), 0)) {
+            if (!::send(clientBoard.socket, forwardPacket.rawDataBegin(), forwardPacket.totalSize(), 0)) {
                 std::cout << "[Board]\tprocessAssignmentFromMaster::send failed: " << std::strerror(errno) << std::endl;
                 return;
             }
@@ -164,13 +175,24 @@ void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &&assig
     }
 }
 
+void NetworkModule::processHardwareSpecsFromMaster(Protocol::ReadablePacket &packet)
+{
+    char buffer[256];
+    std::memset(&buffer, 0, sizeof(buffer));
+    WritablePacket response(&buffer, &buffer + sizeof(WritablePacket::Header) + packet.payload());
+
+    response.prepare(Protocol::ProtocolType::Connection, Protocol::ConnectionCommand::HardwareSpecs);
+    response << BoardSize { Pin::Count, 1 };
+
+}
+
 void NetworkModule::processMaster(Scheduler &scheduler)
 {
     std::cout << "[Board]\tNetworkModule::processMaster" << std::endl;
 
     using namespace Protocol;
 
-    char buffer[1024];
+    std::uint8_t buffer[1024];
     std::memset(&buffer, 0, sizeof(buffer));
     // Proccess master input, read must be non-blocking
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
@@ -183,7 +205,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
         _nodeDistance = 0u;
         scheduler.setState(Scheduler::State::Disconnected);
         notifyDisconnectionToClients();
-	return;
+	    return;
     }
     else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
         std::cout << "[Board]\tNo data from received from master" << std::endl;
@@ -192,24 +214,36 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 
     std::cout << "[Board]\tReceived " << ret << " bytes from master" << std::endl;
 
-    char *bufferPtr = &buffer[0];
-    while (1) {
-        auto *packetHeader = reinterpret_cast<ReadablePacket::Header *>(bufferPtr);
-        if (packetHeader->magicKey != SpecialLabMagicKey) {
+    std::uint8_t *bufferPtr = &buffer[0];
+    std::uint8_t *bufferEnd = bufferPtr + ret;
+
+    while (bufferPtr != bufferEnd) {
+        ReadablePacket packet(bufferPtr, bufferEnd);
+
+        if (packet.magicKey() != SpecialLabMagicKey) {
             std::cout << "[Board]\tNo new packet from master to process..." << std::endl;
+            ++bufferPtr;
+            continue;
+        }
+
+        switch (packet.protocolType()) {
+        case ProtocolType::Connection:
+            switch (packet.commandAs<ConnectionCommand>()) {
+            case ConnectionCommand::IDAssignment:
+                processAssignmentFromMaster(packet);
+                break;
+            case ConnectionCommand::HardwareSpecs:
+                processHardwareSpecsFromMaster(packet);
+                break;
+            }
+            break;
+        default:
             break;
         }
-        std::size_t packetPayload = packetHeader->payload;
 
-        /* Handle master packet command */
-        if (packetHeader->protocolType == ProtocolType::Connection &&
-                packetHeader->command == static_cast<std::uint16_t>(ConnectionCommand::IDAssignment)) {
-            std::cout << "[Board]\tProcessing an assignment packet from master of size " << sizeof(ReadablePacket::Header) + packetPayload << std::endl;
-            processAssignmentFromMaster(ReadablePacket(bufferPtr, bufferPtr + sizeof(ReadablePacket::Header) + packetPayload));
-        }
         /* others cases ... */
 
-        bufferPtr += sizeof(ReadablePacket::Header) + packetPayload;
+        bufferPtr += packet.totalSize();
     }
 }
 
@@ -229,7 +263,7 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
 
     readClients(scheduler); // 1
     processClientsData(scheduler); // 2
-    if (_networkBuffer.size() == 0) {
+    if (_NetworkBuffer.transferSize() == 0u) {
         std::cout << "[Board]\tNo data to transfer to master" << std::endl;
         return;
     }
@@ -264,7 +298,7 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
 
     // Send ID assignment to master
     std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
-    if (!send(_masterSocket, &requestBuffer, requestPacket.totalSize(), 0)) {
+    if (!::send(_masterSocket, requestPacket.rawDataBegin(), requestPacket.totalSize(), 0)) {
         std::cout << "[Board]\tinitNewMasterConnection::send failed: " << std::strerror(errno) << std::endl;
         return;
     }
@@ -498,8 +532,8 @@ void NetworkModule::readClients(Scheduler &scheduler)
         return;
     }
 
-    std::size_t assignIndex { AssignOffset };
-    std::size_t inputsIndex { InputsOffset };
+    std::size_t assignOffset { AssignOffset };
+    std::size_t inputsOffset { InputsOffset };
 
     for (auto client = _clients.begin(); client != _clients.end(); ) {
 
@@ -509,13 +543,15 @@ void NetworkModule::readClients(Scheduler &scheduler)
         << " with boardID = " << static_cast<int>(client->id) << std::endl;
 
         if (client->id == 0) {
-            processClientAssignmentRequest(client, assignIndex);    // Client in "assign mode"
+            processClientAssignmentRequest(client, assignOffset);    // Client in "assign mode"
         } else
-            readDataFromClient(client, inputsIndex);                // Client in "inputs mode"
+            readDataFromClient(client, inputsOffset);                // Client in "inputs mode"
 
         if (client != _clients.end())
             client++;
     }
+    _NetworkBuffer.incrementAssignHead(assignOffset - AssignOffset);
+    _NetworkBuffer.incrementSlaveDataHead(inputsOffset - InputsOffset);
 }
 
 void NetworkModule::processClientsData(Scheduler &scheduler)
@@ -534,67 +570,62 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
 
     using namespace Protocol;
 
-    std::uint8_t *transferBufferPtr = _networkBuffer.data();
-    std::uint8_t *slavesDataPtr = _networkBuffer.data() + InputsOffset;
+    std::uint8_t *transferPtr = _NetworkBuffer.transferEnd();
+    std::uint8_t *transferRealEnd = _NetworkBuffer.transferEnd();
+    std::size_t transferSize = 0u;
 
-    // STEP 1 : "slaves assigns"
+    { // STEP 1 : "slaves assigns"
+        const std::uint8_t *slavesDataPtr = _NetworkBuffer.slaveDataBegin();
+        const std::uint8_t *slavesDataEnd = _NetworkBuffer.slaveDataEnd();
+        while (slavesDataPtr != slavesDataEnd) {
+            std::cout << "[Board]\tProcessing a new SLAVE assign request..." << std::endl;
+            ReadablePacket clientPacket(slavesDataPtr, slavesDataEnd);
 
-    std::size_t transferBufferSize = 0u;
+            if (clientPacket.magicKey() != SpecialLabMagicKey ||
+                    !(clientPacket.protocolType() == ProtocolType::Connection &&
+                    clientPacket.commandAs<ConnectionCommand>() == ConnectionCommand::IDAssignment)) {
+                ++slavesDataPtr;
+                continue;
+            }
 
-    while (1) {
-        auto *packetHeader = reinterpret_cast<ReadablePacket::Header *>(slavesDataPtr);
-        std::size_t packetPayload = packetHeader->payload;
+            WritablePacket forwardPacket(transferPtr, transferRealEnd);
 
-        if (packetHeader->magicKey != SpecialLabMagicKey ||
-                !(packetHeader->protocolType == ProtocolType::Connection &&
-                packetHeader->command == static_cast<std::uint16_t>(ConnectionCommand::IDAssignment))) {
-            std::cout << "[Board]\tNo slave assign request to process..." << std::endl;
-            break;
+            forwardPacket = clientPacket;
+            forwardPacket.pushFootprint(_boardID);
+
+            transferSize += forwardPacket.totalSize();
+            transferPtr += forwardPacket.totalSize();
+            slavesDataPtr += clientPacket.totalSize();;
         }
-
-        std::cout << "[Board]\tProcessing a new SLAVE assign request..." << std::endl;
-
-        ReadablePacket clientPacket(slavesDataPtr, slavesDataPtr + sizeof(WritablePacket::Header) + packetPayload);
-        WritablePacket forwardPacket(transferBufferPtr, transferBufferPtr + sizeof(WritablePacket::Header) + packetPayload + sizeof(BoardID));
-
-        forwardPacket = clientPacket;
-        forwardPacket.pushFootprint(_boardID);
-
-        transferBufferSize += sizeof(WritablePacket::Header) + forwardPacket.payload();
-
-        slavesDataPtr += sizeof(WritablePacket::Header) + packetPayload;
-        transferBufferPtr += sizeof(WritablePacket::Header) + forwardPacket.payload();
     }
 
-    // STEP 2 : "self assigns"
+    { // STEP 2 : "self assigns"
+        const std::uint8_t *assignPtr = _NetworkBuffer.assignBegin();
+        const std::uint8_t *assignEnd = _NetworkBuffer.assignEnd();
 
-    std::uint8_t *selfAssignPtr = _networkBuffer.data() + AssignOffset;
+        while (assignPtr != assignEnd) {
+            std::cout << "[Board]\tProcessing a new SELF assign request..." << std::endl;
+            ReadablePacket clientPacket(assignPtr, assignEnd);
 
-    while (1) {
-        auto *packetHeader = reinterpret_cast<ReadablePacket::Header *>(selfAssignPtr);
-        std::size_t packetPayload = packetHeader->payload;
+            if (clientPacket.magicKey() != SpecialLabMagicKey ||
+                    !(clientPacket.protocolType() == ProtocolType::Connection &&
+                    clientPacket.commandAs<ConnectionCommand>() == ConnectionCommand::IDAssignment)) {
+                ++assignPtr;
+                continue;
+            }
 
-        if (packetHeader->magicKey != SpecialLabMagicKey ||
-                !(packetHeader->protocolType == ProtocolType::Connection &&
-                packetHeader->command == static_cast<std::uint16_t>(ConnectionCommand::IDAssignment))) {
-            std::cout << "[Board]\tNo self assign request to process..." << std::endl;
-            break;
+            WritablePacket forwardPacket(transferPtr, transferRealEnd);
+
+            forwardPacket = clientPacket;
+            transferSize += forwardPacket.totalSize();
+            transferPtr += forwardPacket.totalSize();
+            assignPtr += clientPacket.totalSize();
         }
-
-        std::cout << "[Board]\tProcessing a new SELF assign request..." << std::endl;
-
-        ReadablePacket clientPacket(selfAssignPtr, selfAssignPtr + sizeof(WritablePacket::Header) + packetPayload);
-        WritablePacket forwardPacket(transferBufferPtr, transferBufferPtr + sizeof(WritablePacket::Header) + packetPayload);
-
-        forwardPacket = clientPacket;
-
-        transferBufferPtr += sizeof(WritablePacket::Header) + forwardPacket.payload();
-        transferBufferSize += sizeof(WritablePacket::Header) + forwardPacket.payload();
-
-        selfAssignPtr += sizeof(WritablePacket::Header) + packetPayload;
     }
 
-    _networkBuffer.setTransferSize(static_cast<short unsigned int>(transferBufferSize));
+    // STEP 4: "self events"
+
+    _NetworkBuffer.incrementTransferHead(transferSize);
 }
 
 void NetworkModule::transferToMaster(Scheduler &scheduler)
@@ -603,18 +634,18 @@ void NetworkModule::transferToMaster(Scheduler &scheduler)
     std::cout << "[Board]\tNetworkModule::transferToMaster" << std::endl;
 
     // Transfer all data of the current tick to master endpoint
-    auto ret = ::send(_masterSocket, _networkBuffer.data(), _networkBuffer.size(), 0);
+    auto ret = ::send(_masterSocket, _NetworkBuffer.transferBegin(), _NetworkBuffer.transferSize(), 0);
     if (!ret && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
         std::cout << "[Board]\ttransferToMaster::send failed: " << std::strerror(errno) << std::endl;
         return;
     }
     std::cout << "[Board]\tTransfered " << ret << " bytes to master endpoint" << std::endl;
-    _networkBuffer.reset();
+    _NetworkBuffer.reset();
 }
 
 bool NetworkModule::readDataFromClient(Client *client, std::size_t &offset)
 {
-    std::uint8_t *networkBuffer = _networkBuffer.data() + offset;
+    std::uint8_t *networkBuffer = _NetworkBuffer.transferBegin() + offset;
 
     const auto ret = ::recv(client->socket, networkBuffer, 1024, MSG_DONTWAIT);
 
@@ -642,29 +673,25 @@ void NetworkModule::processClientAssignmentRequest(Client *client, std::size_t &
 {
     using namespace Protocol;
 
-    std::uint8_t *requestPacketPtr = _networkBuffer.data() + assignOffset;
+    std::uint8_t *requestPacketPtr = _NetworkBuffer.transferBegin() + assignOffset;
 
-    if (!readDataFromClient(client, assignOffset)) {
+    if (!readDataFromClient(client, assignOffset))
         return;
-    }
 
-    auto *packetHeader = reinterpret_cast<ReadablePacket::Header *>(requestPacketPtr);
-    std::size_t packetPayload = packetHeader->payload;
+    WritablePacket requestPacket(requestPacketPtr, _NetworkBuffer.assignRealEnd());
 
-    if (packetHeader->magicKey != SpecialLabMagicKey ||
-            !(packetHeader->protocolType == ProtocolType::Connection &&
-            packetHeader->command == static_cast<std::uint16_t>(ConnectionCommand::IDAssignment))) {
+    if (requestPacket.magicKey() != SpecialLabMagicKey ||
+            !(requestPacket.protocolType() == ProtocolType::Connection &&
+            requestPacket.commandAs<ConnectionCommand>() == ConnectionCommand::IDAssignment)) {
                 std::cout << "[Board]\tInvalid packet from a client in assignment mode !" << std::endl;
                 return;
     }
-
-    WritablePacket requestPacket(requestPacketPtr, requestPacketPtr + sizeof(WritablePacket::Header) + packetPayload + 2 * sizeof(BoardID));
 
     // Adding self board ID to the stack
     requestPacket.pushFootprint(_boardID);
 
     // Add temporary board ID to the packet
-    _selfAssignIndex++;
+    ++_selfAssignIndex;
     requestPacket.pushFootprint(_selfAssignIndex);
     client->id = _selfAssignIndex;
     if (_selfAssignIndex == 255)
