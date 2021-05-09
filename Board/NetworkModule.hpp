@@ -23,6 +23,8 @@
 #include <Protocol/Packet.hpp>
 #include <Protocol/Protocol.hpp>
 #include <Protocol/ConnectionProtocol.hpp>
+#include <Protocol/EventProtocol.hpp>
+
 #include "Types.hpp"
 #include "Module.hpp"
 

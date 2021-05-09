@@ -251,12 +251,26 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 
 void NetworkModule::processHardwareEvents(Scheduler &scheduler)
 {
+    using namespace Protocol;
+
     auto &events = scheduler.hardwareModule().inputEvents();
 
     for (const auto event : events) {
         std::cout << "NEW EVENT DETECTED" << std::endl;
         std::cout << "Input index: " << static_cast<int>(event.inputIdx) << std::endl;
         std::cout << "Event value: " << static_cast<int>(event.value) << std::endl;
+
+        constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardID) + sizeof(InputEvent);
+        std::uint8_t buffer[packetSize];
+        std::memset(&buffer, 0, packetSize);
+
+        WritablePacket packet(&buffer, &buffer + packetSize);
+        packet.prepare(ProtocolType::Event, EventCommand::ControlsChanged);
+
+        packet << _boardID;
+        packet << event;
+
+        _NetworkBuffer.writeTransfer(packet);
     }
 }
 
@@ -306,15 +320,17 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
 
 void NetworkModule::sendHardwareSpecsToMaster(void)
 {
+    NETWORK_LOG("NetworkModule::sendHardwareSpecsToMaster");
+
     using namespace Protocol;
 
-
-
-    constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardSize);
+    constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardID) + sizeof(BoardSize);
     std::uint8_t buffer[packetSize];
     std::memset(&buffer, 0, packetSize);
     WritablePacket packet(&buffer, &buffer + packetSize);
     packet.prepare(ProtocolType::Connection, ConnectionCommand::HardwareSpecs);
+
+    packet << _boardID;
 
     BoardSize boardSpecs;
     boardSpecs.height = 0;
