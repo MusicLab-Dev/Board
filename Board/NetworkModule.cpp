@@ -255,23 +255,25 @@ void NetworkModule::processHardwareEvents(Scheduler &scheduler)
 
     auto &events = scheduler.hardwareModule().inputEvents();
 
-    for (const auto event : events) {
-        std::cout << "NEW EVENT DETECTED" << std::endl;
-        std::cout << "Input index: " << static_cast<int>(event.inputIdx) << std::endl;
-        std::cout << "Event value: " << static_cast<int>(event.value) << std::endl;
+    WritablePacket packet(_NetworkBuffer.transferEnd(), _NetworkBuffer.transferRealEnd());
+    packet.prepare(ProtocolType::Event, EventCommand::ControlsChanged);
 
-        constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardID) + sizeof(InputEvent);
-        std::uint8_t buffer[packetSize];
-        std::memset(&buffer, 0, packetSize);
+    packet << _boardID;
+    packet << events;
 
-        WritablePacket packet(&buffer, &buffer + packetSize);
-        packet.prepare(ProtocolType::Event, EventCommand::ControlsChanged);
+    _NetworkBuffer.incrementTransferHead(packet.totalSize());
 
-        packet << _boardID;
-        packet << event;
-
-        _NetworkBuffer.writeTransfer(packet);
-    }
+    // for (const auto event : events) {
+    //     std::cout << "NEW EVENT DETECTED" << std::endl;
+    //     std::cout << "Input index: " << static_cast<int>(event.inputIdx) << std::endl;
+    //     std::cout << "Event value: " << static_cast<int>(event.value) << std::endl;
+    //     constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardID) + sizeof(InputEvent);
+    //     std::uint8_t buffer[packetSize];
+    //     std::memset(&buffer, 0, packetSize);
+    //     packet << _boardID;
+    //     packet << event;
+    //     _NetworkBuffer.writeTransfer(packet);
+    // }
 }
 
 void NetworkModule::tick(Scheduler &scheduler) noexcept
