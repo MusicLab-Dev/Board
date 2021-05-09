@@ -267,6 +267,13 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
         std::cout << "[Board]\tNo data to transfer to master" << std::endl;
         return;
     }
+
+    std::uint8_t test[100];
+    std::memset(&test, 0, sizeof(test));
+    Protocol::WritablePacket packet(&test, &test + sizeof(test));
+    packet << static_cast<int>(42);
+    _NetworkBuffer.writeTransfer(packet);
+
     transferToMaster(scheduler); // 3
 }
 
