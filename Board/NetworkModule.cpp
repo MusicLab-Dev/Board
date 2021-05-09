@@ -255,6 +255,9 @@ void NetworkModule::processHardwareEvents(Scheduler &scheduler)
 
     auto &events = scheduler.hardwareModule().inputEvents();
 
+    if (events.empty())
+        return;
+
     WritablePacket packet(_NetworkBuffer.transferEnd(), _NetworkBuffer.transferRealEnd());
     packet.prepare(ProtocolType::Event, EventCommand::ControlsChanged);
 
