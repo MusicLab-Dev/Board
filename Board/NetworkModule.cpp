@@ -266,13 +266,6 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
     readClients(scheduler); // 1
     processClientsData(scheduler); // 2
 
-    // Test
-    std::uint8_t test[100];
-    std::memset(&test, 0, sizeof(test));
-    Protocol::WritablePacket packet(&test, &test + sizeof(test));
-    packet << static_cast<int>(42);
-    _NetworkBuffer.writeTransfer(packet);
-
     if (_NetworkBuffer.transferSize() == 0u) {
         std::cout << "[Board]\tNo data to transfer to master" << std::endl;
         return;
@@ -296,6 +289,25 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
     // if (scheduler.state() == Scheduler::State::Connected)
     discoveryEmit(scheduler);
     discoveryScan(scheduler);
+}
+
+void NetworkModule::sendHardwareSpecsToMaster(void)
+{
+    using namespace Protocol;
+
+    constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardSize);
+    std::uint8_t buffer[packetSize];
+    std::memset(&buffer, 0, packetSize);
+    WritablePacket packet(&buffer, &buffer + packetSize);
+    packet.prepare(ProtocolType::Connection, ConnectionCommand::HardwareSpecs);
+
+    BoardSize boardSpecs;
+    boardSpecs.height = 0;
+    boardSpecs.width = 0;
+
+    packet << boardSpecs;
+
+    _NetworkBuffer.writeTransfer(packet);
 }
 
 void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler)
@@ -340,6 +352,8 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     scheduler.setState(Scheduler::State::Connected);
 
     fcntl(_masterSocket, F_SETFL, O_NONBLOCK);
+
+    sendHardwareSpecsToMaster();
 }
 
 void NetworkModule::setSocketKeepAlive(const int socket) const noexcept
