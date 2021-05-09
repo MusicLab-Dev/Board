@@ -194,13 +194,12 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 
     std::uint8_t buffer[1024];
     std::memset(&buffer, 0, sizeof(buffer));
+
     // Proccess master input, read must be non-blocking
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
-    if (ret < 0) {
-        std::cout << "ERRNO = " << errno << std::endl;
-    }
-    if (ret == 0 || (ret < 0 && errno == ETIMEDOUT)) {
-        std::cout << "[Board]\tDisconnected from master" << std::endl;
+
+    if (ret == 0 || (ret < 0 && (errno == ECONNRESET || errno == ETIMEDOUT))) {
+        std::cout << "[Board]\tDisconnected from master, return" << std::endl;
         ::close(_masterSocket);
         _masterSocket = -1;
         _boardID = 0u;
@@ -211,7 +210,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 	    return;
     }
     else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        std::cout << "[Board]\tNo data from received from master" << std::endl;
+        std::cout << "[Board]\tNo data received from master, return" << std::endl;
         return;
     }
 
