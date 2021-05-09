@@ -325,7 +325,7 @@ void NetworkModule::sendHardwareSpecsToMaster(void)
     packet << _boardID;
 
     BoardSize boardSpecs;
-    boardSpecs.height = 1;
+    boardSpecs.heigth = 1;
     boardSpecs.width = Pin::Count;
 
     packet << boardSpecs;
