@@ -251,6 +251,8 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 
 void NetworkModule::processHardwareEvents(Scheduler &scheduler)
 {
+    NETWORK_LOG("[Board]\tNetworkModule::processHardwareEvents");
+
     using namespace Protocol;
 
     auto &events = scheduler.hardwareModule().inputEvents();
@@ -313,7 +315,7 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
 
 void NetworkModule::sendHardwareSpecsToMaster(void)
 {
-    NETWORK_LOG("NetworkModule::sendHardwareSpecsToMaster");
+    NETWORK_LOG("[Board]\tNetworkModule::sendHardwareSpecsToMaster");
 
     using namespace Protocol;
 
@@ -624,7 +626,8 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
     std::uint8_t *transferRealEnd = _NetworkBuffer.transferEnd();
     std::size_t transferSize = 0u;
 
-    { // STEP 1 : "slaves assigns"
+    // STEP 1 : "slaves assigns"
+    {
         const std::uint8_t *slavesDataPtr = _NetworkBuffer.slaveDataBegin();
         const std::uint8_t *slavesDataEnd = _NetworkBuffer.slaveDataEnd();
         while (slavesDataPtr != slavesDataEnd) {
@@ -649,7 +652,8 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
         }
     }
 
-    { // STEP 2 : "self assigns"
+    // STEP 2 : "self assigns"
+    {
         const std::uint8_t *assignPtr = _NetworkBuffer.assignBegin();
         const std::uint8_t *assignEnd = _NetworkBuffer.assignEnd();
 
