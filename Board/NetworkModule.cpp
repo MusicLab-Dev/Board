@@ -249,6 +249,15 @@ void NetworkModule::processMaster(Scheduler &scheduler)
     }
 }
 
+void NetworkModule::processHardwareEvents(Scheduler &scheduler)
+{
+    auto &events = scheduler.hardwareModule().inputEvents();
+
+    for (const auto event : events) {
+        std::cout << event.value << std::endl;
+    }
+}
+
 void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
     NETWORK_LOG("[Board]\tNetworkModule::tick");
@@ -265,6 +274,8 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
 
     readClients(scheduler); // 1
     processClientsData(scheduler); // 2
+
+    processHardwareEvents(scheduler);
 
     if (_NetworkBuffer.transferSize() == 0u) {
         NETWORK_LOG("[Board]\tNo data to transfer to master");

@@ -225,6 +225,8 @@ private:
     /** @brief Notify boards that connection with the studio has been lost & close all clients */
     void notifyDisconnectionToClients(void);
 
+    void processHardwareEvents(Scheduler &scheduler);
+
     void setSocketReusable(const Net::Socket socket)
     {
         const int enable = 1;
