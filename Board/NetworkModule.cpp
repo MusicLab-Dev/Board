@@ -254,7 +254,9 @@ void NetworkModule::processHardwareEvents(Scheduler &scheduler)
     auto &events = scheduler.hardwareModule().inputEvents();
 
     for (const auto event : events) {
-        std::cout << event.value << std::endl;
+        std::cout << "NEW EVENT DETECTED" << std::endl;
+        std::cout << "Input index: " << static_cast<int>(event.inputIdx) << std::endl;
+        std::cout << "Event value: " << static_cast<int>(event.value) << std::endl;
     }
 }
 
