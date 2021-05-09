@@ -22,7 +22,7 @@ void NetworkModule::NetworkBuffer::writeTransfer(const Protocol::Internal::Packe
 
 NetworkModule::NetworkModule(void)
 {
-    std::cout << "[Board]\tNetworkModule constructor" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule constructor");
 
     // Open UDP broadcast socket
     int broadcast = 1;
@@ -87,7 +87,7 @@ NetworkModule::NetworkModule(void)
     if (ret < 0 && (errno == 13 || errno == 98))
         throw std::runtime_error(std::strerror(errno));
     if (ret < 0) {
-        std::cout << "[Board]\tBIND ERROR" << std::endl;
+        NETWORK_LOG("[Board]\tBIND ERROR");
     }
 
     // Initialize network buffer
@@ -96,7 +96,7 @@ NetworkModule::NetworkModule(void)
 
 NetworkModule::~NetworkModule(void)
 {
-    std::cout << "[Board]\tNetworkModule destructor" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule destructor");
 
     ::close(_udpBroadcastSocket);
     if (_masterSocket != -1) {
@@ -124,17 +124,17 @@ bool NetworkModule::tryToBindUdp(void)
     if (ret < 0 && (errno == 13 || errno == 98))
         throw std::runtime_error(std::strerror(errno));
     if (ret < 0) {
-        std::cout << "[Board]\ttryToBindUdp: UDP broadcast address does not exist..." << std::endl;
+        NETWORK_LOG("[Board]\ttryToBindUdp: UDP broadcast address does not exist...");
     }
     return ret == 0;
 }
 
 void NetworkModule::notifyDisconnectionToClients(void)
 {
-    std::cout << "[Board]\tNetworkModule::notifyDisconnectionToClients" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::notifyDisconnectionToClients");
 
     if (_clients.empty()) {
-        std::cout << "[Board]\tNo client board to notify..." << std::endl;
+        NETWORK_LOG("[Board]\tNo client board to notify...");
         return;
     }
     for (const auto client : _clients) {
@@ -145,7 +145,7 @@ void NetworkModule::notifyDisconnectionToClients(void)
 
 void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &packet)
 {
-    std::cout << "[Board]\tNetworkModule::processAssignmentFromMaster" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::processAssignmentFromMaster");
 
     using namespace Protocol;
 
@@ -159,17 +159,17 @@ void NetworkModule::processAssignmentFromMaster(Protocol::ReadablePacket &packet
         BoardID temporaryAssignedID = forwardPacket.popFrontStack();
         BoardID clientNewID = packet.extract<BoardID>();
 
-        std::cout << "[Board]\tID assignment packet is for direct client with temporary ID = " << static_cast<int>(temporaryAssignedID) << std::endl;
+        NETWORK_LOG("[Board]\tID assignment packet is for direct client with temporary ID = ", static_cast<int>(temporaryAssignedID));
 
         for (auto &clientBoard : _clients) {
             if (clientBoard.id != temporaryAssignedID)
                 continue;
             if (!::send(clientBoard.socket, forwardPacket.rawDataBegin(), forwardPacket.totalSize(), 0)) {
-                std::cout << "[Board]\tprocessAssignmentFromMaster::send failed: " << std::strerror(errno) << std::endl;
+                NETWORK_LOG("[Board]\tprocessAssignmentFromMaster::send failed: ", std::strerror(errno));
                 return;
             }
             clientBoard.id = clientNewID;
-            std::cout << "[Board]\tDirect client get final ID of " << static_cast<int>(clientBoard.id) << " assigned by studio" << std::endl;
+            NETWORK_LOG("[Board]\tDirect client get final ID of ", static_cast<int>(clientBoard.id), " assigned by studio");
             return;
         }
     }
@@ -188,7 +188,7 @@ void NetworkModule::processHardwareSpecsFromMaster(Protocol::ReadablePacket &pac
 
 void NetworkModule::processMaster(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule::processMaster" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::processMaster");
 
     using namespace Protocol;
 
@@ -199,7 +199,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
 
     if (ret == 0 || (ret < 0 && (errno == ECONNRESET || errno == ETIMEDOUT))) {
-        std::cout << "[Board]\tDisconnected from master, return" << std::endl;
+        NETWORK_LOG("[Board]\tDisconnected from master");
         ::close(_masterSocket);
         _masterSocket = -1;
         _boardID = 0u;
@@ -210,11 +210,11 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 	    return;
     }
     else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        std::cout << "[Board]\tNo data received from master, return" << std::endl;
+        NETWORK_LOG("[Board]\tNo data received from master, return");
         return;
     }
 
-    std::cout << "[Board]\tReceived " << ret << " bytes from master" << std::endl;
+    NETWORK_LOG("[Board]\tReceived ", ret, " bytes from master");
 
     std::uint8_t *bufferPtr = &buffer[0];
     std::uint8_t *bufferEnd = bufferPtr + ret;
@@ -223,7 +223,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
         ReadablePacket packet(bufferPtr, bufferEnd);
 
         if (packet.magicKey() != SpecialLabMagicKey) {
-            std::cout << "[Board]\tNo new packet from master to process..." << std::endl;
+            NETWORK_LOG("[Board]\tNo new packet from master to process...");
             ++bufferPtr;
             continue;
         }
@@ -251,7 +251,7 @@ void NetworkModule::processMaster(Scheduler &scheduler)
 
 void NetworkModule::tick(Scheduler &scheduler) noexcept
 {
-    std::cout << "[Board]\tNetworkModule::tick" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::tick");
 
     if (scheduler.state() != Scheduler::State::Connected) // If connected, process master and clients
         return;
@@ -267,7 +267,7 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
     processClientsData(scheduler); // 2
 
     if (_NetworkBuffer.transferSize() == 0u) {
-        std::cout << "[Board]\tNo data to transfer to master" << std::endl;
+        NETWORK_LOG("[Board]\tNo data to transfer to master");
         return;
     }
 
@@ -276,7 +276,7 @@ void NetworkModule::tick(Scheduler &scheduler) noexcept
 
 void NetworkModule::discover(Scheduler &scheduler) noexcept
 {
-    std::cout << "[Board]\tNetworkModule::discover" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::discover");
 
     // Check if the broadcast socket is binded
     if (!_isBinded) {
@@ -294,6 +294,8 @@ void NetworkModule::discover(Scheduler &scheduler) noexcept
 void NetworkModule::sendHardwareSpecsToMaster(void)
 {
     using namespace Protocol;
+
+
 
     constexpr std::size_t packetSize = sizeof(WritablePacket::Header) + sizeof(BoardSize);
     std::uint8_t buffer[packetSize];
@@ -320,31 +322,31 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     requestPacket << BoardID(0u);
 
     // Send ID assignment to master
-    std::cout << "[Board]\tSending ID assignment packet..." << std::endl;
+    NETWORK_LOG("[Board]\tSending ID assignment packet...");
     if (!::send(_masterSocket, requestPacket.rawDataBegin(), requestPacket.totalSize(), 0)) {
-        std::cout << "[Board]\tinitNewMasterConnection::send failed: " << std::strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\tinitNewMasterConnection::send failed: ", std::strerror(errno));
         return;
     }
 
     std::memset(&requestBuffer, 0, sizeof(requestBuffer));
 
     // Wait for ID assignation from master
-    std::cout << "[Board]\tWaiting for ID assignment packet from master..." << std::endl;
+    NETWORK_LOG("[Board]\tWaiting for ID assignment packet from master...");
     auto ret = ::read(_masterSocket, &requestBuffer, sizeof(requestBuffer));
     if (ret < 0) {
-        std::cout << "[Board]\tinitNewMasterConnection::read failed: " << std::strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\tinitNewMasterConnection::read failed: ", std::strerror(errno));
         return;
     }
 
     ReadablePacket responsePacket(std::begin(requestBuffer), std::end(requestBuffer));
     if (responsePacket.protocolType() != ProtocolType::Connection ||
             responsePacket.commandAs<ConnectionCommand>() != ConnectionCommand::IDAssignment) {
-                std::cout << "[Board]\tInvalid ID assignment packet..." << std::endl;
+                NETWORK_LOG("[Board]\tInvalid ID assignment packet...");
                 return;
     }
 
     _boardID = responsePacket.extract<BoardID>();
-    std::cout << "[Board]\tAssigned BoardID from master: " << static_cast<int>(_boardID) << std::endl;
+    NETWORK_LOG("[Board]\tAssigned BoardID from master: ", static_cast<int>(_boardID));
 
     // Only if ID assignment is done correctly
     _connectionType = masterEndpoint.connectionType;
@@ -371,7 +373,7 @@ void NetworkModule::setSocketKeepAlive(const int socket) const noexcept
 
 void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept
 {
-    std::cout << "[Board]\tNetworkModule::initNewMasterConnection" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::initNewMasterConnection");
 
     if (_masterSocket != -1) {
         ::close(_masterSocket);
@@ -379,7 +381,7 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
     }
     _masterSocket = ::socket(AF_INET, SOCK_STREAM, 0);
     if (_masterSocket < 0) {
-        std::cout << "[Board]\tinitNewMasterConnection::socket failed: " << strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\tinitNewMasterConnection::socket failed: ", strerror(errno));
         return;
     }
 
@@ -394,18 +396,18 @@ void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Sche
         sizeof(masterAddress)
     );
     if (ret < 0) {
-        std::cout << "[Board]\tinitNewMasterConnection::connect failed: " << strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\tinitNewMasterConnection::connect failed: ", strerror(errno));
         return;
     }
     setSocketKeepAlive(_masterSocket);
-    std::cout << "[Board]\tConnected to studio master socket" << std::endl;
+    NETWORK_LOG("[Board]\tConnected to studio master socket");
     startIDRequestToMaster(masterEndpoint, scheduler);
     return;
 }
 
 void NetworkModule::analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoints, Scheduler &scheduler) noexcept
 {
-    std::cout << "[Board]\tNetworkModule::analyzeUdpEndpoints" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::analyzeUdpEndpoints");
 
     std::size_t index = 0;
     std::size_t i = 0;
@@ -422,14 +424,14 @@ void NetworkModule::analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoint
     if ((_connectionType != Protocol::ConnectionType::USB &&
         udpEndpoints.at(index).connectionType == Protocol::ConnectionType::USB) ||
         udpEndpoints.at(index).distance + 1 < _nodeDistance) {
-        std::cout << "[Board]\tNew endpoint found for studio connection" << std::endl;
+        NETWORK_LOG("[Board]\tNew endpoint found for studio connection");
         initNewMasterConnection(udpEndpoints.at(index), scheduler);
     }
 }
 
 void NetworkModule::discoveryScan(Scheduler &scheduler)
 {
-    std::cout << "[Board]\tNetworkModule::discoveryScan" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::discoveryScan");
 
     sockaddr_in udpSenderAddress;
     int udpSenderAddressLength = sizeof(udpSenderAddress);
@@ -446,11 +448,11 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
             reinterpret_cast<sockaddr *>(&udpSenderAddress),
             reinterpret_cast<socklen_t *>(&udpSenderAddressLength)
         );
-        std::cout << "[Board]\tNetworkModule::discoveryScan::recvfrom: " << size << std::endl;
+        NETWORK_LOG("[Board]\tNetworkModule::discoveryScan::recvfrom: ", size);
 
         // Loop end condition, until read buffer is empty
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            std::cout << "[Board]\tNetworkModule::discoveryScan: nothing remaining on the socket" << std::endl;
+            NETWORK_LOG("[Board]\tNetworkModule::discoveryScan: nothing remaining on the socket");
             if (scheduler.state() != Scheduler::State::Connected && !udpEndpoints.empty())
                 analyzeUdpEndpoints(udpEndpoints, scheduler);
             return;
@@ -459,7 +461,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
 
         // Ignore unknown and self broadcasted packets
         if (packet.magicKey != Protocol::SpecialLabMagicKey || packet.boardID == _boardID) {
-            std::cout << "[Board]\tNetworkModule::discoveryScan: ignoring packet" << std::endl;
+            NETWORK_LOG("[Board]\tNetworkModule::discoveryScan: ignoring packet");
             continue;
         }
 
@@ -467,7 +469,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
         char senderAddressString[100];
         std::memset(senderAddressString, 0, 100);
         ::inet_ntop(AF_INET, &(udpSenderAddress.sin_addr), senderAddressString, 100);
-        std::cout << "[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from " << senderAddressString << std::endl;
+        NETWORK_LOG("[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from ", senderAddressString);
 
         Endpoint endpoint;
         endpoint.address = udpSenderAddress.sin_addr.s_addr;
@@ -481,7 +483,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
 void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 {
     (void)scheduler; // cast to remove error
-    std::cout << "[Board]\tNetworkModule::discoveryEmit" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::discoveryEmit");
 
     Protocol::DiscoveryPacket packet;
     packet.magicKey = Protocol::SpecialLabMagicKey;
@@ -505,14 +507,14 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
         sizeof(udpBroadcastAddress)
     );
     if (ret < 0) {
-        std::cout << "[Board]\tNetworkModule::discoveryEmit::sendto failed: " << std::strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\tNetworkModule::discoveryEmit::sendto failed: ", std::strerror(errno));
     }
 }
 
 void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 {
     (void)scheduler; // cast to remove error
-    std::cout << "[Board]\tNetworkModule::proccessNewClientConnections" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::proccessNewClientConnections");
 
     sockaddr_in clientAddress;
     std::memset(&clientAddress, 0, sizeof(clientAddress));
@@ -527,12 +529,12 @@ void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
         );
         // Loop end condition, until all pending connection are proccessed
         if (clientSocket < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            std::cout << "[Board]\tNo new client board connection to proccess..." << std::endl;
+            NETWORK_LOG("[Board]\tNo new client board connection to proccess...");
             return;
         } else if (clientSocket < 0)
             throw std::runtime_error(std::strerror(errno));
 
-        std::cout << "[Board]\tNew board connection from " << inet_ntoa(clientAddress.sin_addr) << ":" << ntohs(clientAddress.sin_port) << std::endl;
+        NETWORK_LOG("[Board]\tNew board connection from ", inet_ntoa(clientAddress.sin_addr), ":", ntohs(clientAddress.sin_port));
 
         // Filling new client struct
         Client clientBoard;
@@ -549,11 +551,11 @@ void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 void NetworkModule::readClients(Scheduler &scheduler)
 {
     (void)scheduler; // cast to remove error
-    std::cout << "[Board]\tNetworkModule::readClients" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::readClients");
 
     // Return if there is no client board(s)
     if (_clients.empty()) {
-        std::cout << "[Board]\tNo connected board to proccess..." << std::endl;
+        NETWORK_LOG("[Board]\tNo connected board to proccess...");
         return;
     }
 
@@ -562,10 +564,14 @@ void NetworkModule::readClients(Scheduler &scheduler)
 
     for (auto client = _clients.begin(); client != _clients.end(); ) {
 
-        std::cout << "[Board]\tProccessing client: "
-        << inet_ntoa(in_addr { client->address })
-        << ":" << ntohs(client->port)
-        << " with boardID = " << static_cast<int>(client->id) << std::endl;
+        NETWORK_LOG(
+            "[Board]\tProccessing client: ",
+            inet_ntoa(in_addr { client->address }),
+            ":",
+            ntohs(client->port),
+            " with boardID = ",
+            static_cast<int>(client->id)
+        );
 
         if (client->id == 0) {
             processClientAssignmentRequest(client, assignOffset);    // Client in "assign mode"
@@ -582,7 +588,7 @@ void NetworkModule::readClients(Scheduler &scheduler)
 void NetworkModule::processClientsData(Scheduler &scheduler)
 {
     (void)scheduler;
-    std::cout << "[Board]\tNetworkModule::processClientsData" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::processClientsData");
 
     /* Processing all data in 4 steps : */
     /* PRIORITY ORDER: slaves assigns, self assigns, slave events, self events */
@@ -603,7 +609,7 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
         const std::uint8_t *slavesDataPtr = _NetworkBuffer.slaveDataBegin();
         const std::uint8_t *slavesDataEnd = _NetworkBuffer.slaveDataEnd();
         while (slavesDataPtr != slavesDataEnd) {
-            std::cout << "[Board]\tProcessing a new SLAVE assign request..." << std::endl;
+            NETWORK_LOG("[Board]\tProcessing a new SLAVE assign request...");
             ReadablePacket clientPacket(slavesDataPtr, slavesDataEnd);
 
             if (clientPacket.magicKey() != SpecialLabMagicKey ||
@@ -629,7 +635,7 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
         const std::uint8_t *assignEnd = _NetworkBuffer.assignEnd();
 
         while (assignPtr != assignEnd) {
-            std::cout << "[Board]\tProcessing a new SELF assign request..." << std::endl;
+            NETWORK_LOG("[Board]\tProcessing a new SELF assign request...");
             ReadablePacket clientPacket(assignPtr, assignEnd);
 
             if (clientPacket.magicKey() != SpecialLabMagicKey ||
@@ -656,15 +662,15 @@ void NetworkModule::processClientsData(Scheduler &scheduler)
 void NetworkModule::transferToMaster(Scheduler &scheduler)
 {
     (void)scheduler; // cast to remove error
-    std::cout << "[Board]\tNetworkModule::transferToMaster" << std::endl;
+    NETWORK_LOG("[Board]\tNetworkModule::transferToMaster");
 
     // Transfer all data of the current tick to master endpoint
     auto ret = ::send(_masterSocket, _NetworkBuffer.transferBegin(), _NetworkBuffer.transferSize(), 0);
     if (!ret && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
-        std::cout << "[Board]\ttransferToMaster::send failed: " << std::strerror(errno) << std::endl;
+        NETWORK_LOG("[Board]\ttransferToMaster::send failed: ", std::strerror(errno));
         return;
     }
-    std::cout << "[Board]\tTransfered " << ret << " bytes to master endpoint" << std::endl;
+    NETWORK_LOG("[Board]\tTransfered ", ret, " bytes to master endpoint");
     _NetworkBuffer.reset();
 }
 
@@ -676,19 +682,19 @@ bool NetworkModule::readDataFromClient(Client *client, std::size_t &offset)
 
     if (ret < 0) {
         if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { // No data to proccess for this client
-            std::cout << "[Board]\tNo data to process from this client..." << std::endl;
+            NETWORK_LOG("[Board]\tNo data to process from this client...");
             return false;
         } else if (ret < 0) { // Error will reading from client socket
-            std::cout << "[Board]\tError reading data from client" << std::endl;
+            NETWORK_LOG("[Board]\tError reading data from client");
             return false;
         }
     } else if (ret == 0) { // Client board disconnection detected
-        std::cout << "[Board]\tClient board disconnection detected" << std::endl;
+        NETWORK_LOG("[Board]\tClient board disconnection detected");
         _clients.erase(client);
         return false;
     }
 
-    std::cout << "[Board]\tReceived " << ret << " bytes from client" << std::endl;
+    NETWORK_LOG("[Board]\tReceived " << ret << " bytes from client");
     offset += ret; // Increment specific index for next read operation
 
     return true;
@@ -708,7 +714,7 @@ void NetworkModule::processClientAssignmentRequest(Client *client, std::size_t &
     if (requestPacket.magicKey() != SpecialLabMagicKey ||
             !(requestPacket.protocolType() == ProtocolType::Connection &&
             requestPacket.commandAs<ConnectionCommand>() == ConnectionCommand::IDAssignment)) {
-                std::cout << "[Board]\tInvalid packet from a client in assignment mode !" << std::endl;
+                NETWORK_LOG("[Board]\tInvalid packet from a client in assignment mode !");
                 return;
     }
 

@@ -14,6 +14,7 @@
 #include "HardwareModule.hpp"
 #include "NetworkModule.hpp"
 #include "ConfigTable.hpp"
+#include <Protocol/NetworkLog.hpp>
 
 static std::ifstream stream("./Board/Board.conf");
 static ConfigTable confTable(stream);

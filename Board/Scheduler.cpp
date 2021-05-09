@@ -17,17 +17,17 @@ static bool Running = false;
 Scheduler::Scheduler(std::vector<std::string> &&arguments)
 {
     (void)arguments; // cast to remove error
-    std::cout << "[Board]\tScheduler consctructor" << std::endl;
+    NETWORK_LOG("[Board]\tScheduler consctructor");
 }
 
 Scheduler::~Scheduler(void)
 {
-    std::cout << "[Board]\tScheduler destructor" << std::endl;
+    NETWORK_LOG("[Board]\tScheduler destructor");
 }
 
 void Scheduler::run(void)
 {
-    std::cout << "[Board]\tBoard running..." << std::endl;
+    NETWORK_LOG("[Board]\tBoard running...");
 
     using namespace std::chrono;
 
