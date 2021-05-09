@@ -63,7 +63,7 @@ private:
     struct alignas_cacheline Cache
     {
         State state { State::Disconnected };
-        Chrono::Duration tickRate { 1000000000 };
+        Chrono::Duration tickRate { 10000 };
     };
 
     Cache _cache;

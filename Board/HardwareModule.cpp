@@ -39,7 +39,7 @@ void HardwareModule::tick(Scheduler &scheduler) noexcept
             static_cast<std::uint8_t>(i),
             ctrl.value1
         });
-        std::cout << "Input event " << i << static_cast<int>(ctrl.value1) << std::endl;
+        NETWORK_LOG("Input event ", i, static_cast<int>(ctrl.value1));
     }
 }
 
