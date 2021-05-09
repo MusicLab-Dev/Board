@@ -196,9 +196,8 @@ void NetworkModule::processMaster(Scheduler &scheduler)
     std::memset(&buffer, 0, sizeof(buffer));
     // Proccess master input, read must be non-blocking
     const auto ret = ::read(_masterSocket, &buffer, sizeof(buffer));
-    if (ret == -1) {
-        std::cout << errno << std::endl;
-        exit(0);
+    if (ret < 0) {
+        std::cout << "ERRNO = " << errno << std::endl;
     }
     if (ret == 0 || (ret < 0 && errno == ETIMEDOUT)) {
         std::cout << "[Board]\tDisconnected from master" << std::endl;
