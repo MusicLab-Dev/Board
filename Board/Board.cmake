@@ -9,14 +9,11 @@ set(BoardSources
     ${BoardDir}/ConfigTable.cpp
     ${BoardDir}/HardwareModule.cpp
     ${BoardDir}/HardwareModule.hpp
-    ${BoardDir}/HardwareModule.ipp
     ${BoardDir}/Module.hpp
     ${BoardDir}/NetworkModule.cpp
     ${BoardDir}/NetworkModule.hpp
-    ${BoardDir}/NetworkModule.ipp
     ${BoardDir}/Scheduler.cpp
     ${BoardDir}/Scheduler.hpp
-    ${BoardDir}/Scheduler.ipp
     ${BoardDir}/Types.hpp
     ${BoardDir}/GPIO.hpp
     ${BoardDir}/GPIO.cpp

@@ -379,19 +379,6 @@ void NetworkModule::startIDRequestToMaster(const Endpoint &masterEndpoint, Sched
     sendHardwareSpecsToMaster();
 }
 
-void NetworkModule::setSocketKeepAlive(const int socket) const noexcept
-{
-    int enable = 1;
-    int idle = 3;
-    int interval = 3;
-    int maxpkt = 1;
-
-    setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(int));
-    setsockopt(socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(int));
-    setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(int));
-    setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(int));
-}
-
 void NetworkModule::initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept
 {
     NETWORK_LOG("[Board]\tNetworkModule::initNewMasterConnection");
@@ -487,10 +474,12 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
         }
 
         // Debug
-        char senderAddressString[100];
-        std::memset(senderAddressString, 0, 100);
-        ::inet_ntop(AF_INET, &(udpSenderAddress.sin_addr), senderAddressString, 100);
-        NETWORK_LOG("[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from ", senderAddressString);
+        if (NETWORK_LOG_ENABLED) {
+            char senderAddressString[100];
+            std::memset(senderAddressString, 0, 100);
+            ::inet_ntop(AF_INET, &(udpSenderAddress.sin_addr), senderAddressString, 100);
+            NETWORK_LOG("[Board]\tNetworkModule::discoveryScan: UDP DiscoveryPacket received from ", senderAddressString);
+        }
 
         Endpoint endpoint;
         endpoint.address = udpSenderAddress.sin_addr.s_addr;
@@ -504,6 +493,7 @@ void NetworkModule::discoveryScan(Scheduler &scheduler)
 void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 {
     (void)scheduler; // cast to remove error
+
     NETWORK_LOG("[Board]\tNetworkModule::discoveryEmit");
 
     Protocol::DiscoveryPacket packet;
@@ -535,6 +525,7 @@ void NetworkModule::discoveryEmit(Scheduler &scheduler) noexcept
 void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 {
     (void)scheduler; // cast to remove error
+
     NETWORK_LOG("[Board]\tNetworkModule::proccessNewClientConnections");
 
     sockaddr_in clientAddress;
@@ -572,6 +563,7 @@ void NetworkModule::proccessNewClientConnections(Scheduler &scheduler)
 void NetworkModule::readClients(Scheduler &scheduler)
 {
     (void)scheduler; // cast to remove error
+
     NETWORK_LOG("[Board]\tNetworkModule::readClients");
 
     // Return if there is no client board(s)
@@ -608,7 +600,8 @@ void NetworkModule::readClients(Scheduler &scheduler)
 
 void NetworkModule::processClientsData(Scheduler &scheduler)
 {
-    (void)scheduler;
+    (void)scheduler; // cast to remove error
+
     NETWORK_LOG("[Board]\tNetworkModule::processClientsData");
 
     /* Processing all data in 4 steps : */
@@ -753,4 +746,31 @@ void NetworkModule::processClientAssignmentRequest(Client *client, std::size_t &
 
     // Increasing the assign index by the size of 2 footprint
     assignOffset += 2;
+}
+
+void NetworkModule::setSocketKeepAlive(const int socket) const noexcept
+{
+    int enable = 1;
+    int idle = 3;
+    int interval = 3;
+    int maxpkt = 1;
+
+    setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(int));
+    setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(int));
+}
+
+void NetworkModule::setSocketReusable(const Net::Socket socket) const
+{
+    const int enable = 1;
+    auto ret = ::setsockopt(
+        socket,
+        SOL_SOCKET,
+        SO_REUSEADDR,
+        &enable,
+        sizeof(enable)
+    );
+    if (ret < 0)
+        throw std::runtime_error(std::strerror(errno));
 }

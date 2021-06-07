@@ -213,13 +213,11 @@ private:
     /** @brief Analyse every available UDP endpoints */
     void analyzeUdpEndpoints(const std::vector<Endpoint> &udpEndpoints, Scheduler &scheduler) noexcept;
 
-    /** @brief Set keepalive option on socket */
-    void setSocketKeepAlive(const int socket) const noexcept;
-
     /** @brief Init a new connection to a new master (server) endpoint */
     void initNewMasterConnection(const Endpoint &masterEndpoint, Scheduler &scheduler) noexcept;
 
-    void sendHardwareSpecsToMaster();
+    /** @brief Send the board informations to the master via the HardwareSpecs command */
+    void sendHardwareSpecsToMaster(void);
 
     /** @brief Start ID request & assignment (blocking) procedure with the master */
     void startIDRequestToMaster(const Endpoint &masterEndpoint, Scheduler &scheduler);
@@ -227,24 +225,15 @@ private:
     /** @brief Notify boards that connection with the studio has been lost & close all clients */
     void notifyDisconnectionToClients(void);
 
+    /** @brief Retrieve hardware event from the current tick and store them into the network buffer */
     void processHardwareEvents(Scheduler &scheduler);
 
-    void setSocketReusable(const Net::Socket socket)
-    {
-        const int enable = 1;
-        auto ret = ::setsockopt(
-            socket,
-            SOL_SOCKET,
-            SO_REUSEADDR,
-            &enable,
-            sizeof(enable)
-        );
-        if (ret < 0)
-            throw std::runtime_error(std::strerror(errno));
-    }
 
+    /** @brief Set keepalive option on a network socket */
+    void setSocketKeepAlive(const int socket) const noexcept;
+
+    /** @brief Set reusable option on a network socket */
+    void setSocketReusable(const Net::Socket socket) const;
 };
 
 // static_assert_fit_cacheline(NetworkModule);
-
-#include "NetworkModule.ipp"

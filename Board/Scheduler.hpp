@@ -73,7 +73,3 @@ private:
 
 static_assert_sizeof(Scheduler, Core::CacheLineSize * 4);
 static_assert_alignof(Scheduler, Core::CacheLineSize * 4);
-
-#include "HardwareModule.ipp"
-#include "NetworkModule.ipp"
-#include "Scheduler.ipp"
